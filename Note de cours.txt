@@ -1,0 +1,141 @@
+---- Dockers et conteneurs ----------- https://www.youtube.com/watch?v=AWJG-AbGFik&list=PLn6POgpklwWq0iz59-px2z-qjDdZKEvWd&index=2
+
+conteneur : processus pour faire tourner l'image
+
+Image = package de code et déendance, inactif, stocké sur un registry distant tq docker hub (par defaut).
+On le ramène au niveau local pour travailler avec
+
+Conteneur : l'activation d'une image de manière à faire tourner un processus
+On peut lancer plusieurs conteneurs pour la meme image
+
+Vous pouvez avoir un serveur pour stocker votre image, ce serveur sera votre registry pour les images
+
+---- Installation
+
+ $ cat premier-pas.sh
+
+#!/usr/bin/bash
+
+## Suppression de la précédente version de Docker
+
+sudo apt remove docker docker-engine docker.io containerd runc
+
+## Mise en place du dépôt Docker
+
+sudo apt install ca-certificates curl gnupg lsb-release
+sudo mkdir -m 0755 -p /etc/apt/keyrings
+
+# Pour copier la clé gpg de docker dans le rep local /etc/apt/keyrings:
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmorг -o /etc/apt/keyrings/docker.gpg
+
+echo \
+"deb [arch=$(dpkg --print-architecture) signé-par=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+
+$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+## Installation de docker
+
+sudo apt update
+sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+---- 
+sudo docker ps 					: voir les conteneurs actifs
+sudo docker ps -activation		: voir les conteneurs actifs ou pas
+sudo docker run nginx:latest	: check et lance un conteneur nginx si l'image existe localement sinon télécharge l'image nginx sur docker hub par défaut
+								  et rapatrie l'image localement
+
+sudo docker run -d nginx:latest : option -d ou detached pour lancer le conteneur en background et donner la main au niveau os
+
+sudo usermod -aG docker $USER	: Ajouter le user courant dans le group "docker2 pour éviter de préciser sudo
+
+docker run
+	-d	: mode detach ou background
+--name	: définir le nom du conteneur
+
+Image
+<url_registry>/<nom_image>:<tag>
+
+------------
+docker run -d --name c1 nginx:latest   : Crée un conteneur c1
+docker stop c1
+docker start c1
+docker ps -a
+docker rm -f c1 	: force l'arret et supprime c1
+
+docker run -ti --name c1 nginx:latest  : lance le conteneur en mode interactif
+
+docker run -ti --rm --name c1 debian:latest   : lance une machine linux debian où on y accède en mode root
+												--rm permet de supprimer le conteneur une fois qu'on quitte c1
+						
+docker run -ti --rm --name c1 --hostname host1 debian:latest   : le hostname de la machine linux/debian sera host1
+
+On peut ajouter l'option --dns 8.8.8.8 par exemple si le conteneur n'arrive pas à joindre ce dns
+
+docker ps -q 	: Liste les ids de l'ens des conteneurs actifs  (-qa pour inclure les inactifs)
+docker rm -f $(docker ps -q)	: supprime une liste de conteneurs suivant leurs ids
+
+------------ Les volumes
+
+• facile pour persister de la donnée
+• pratique pour faire des backups
+• partager entre de multiple conteneurs
+• multiconteneurs et permissions
+• locaux ou distants
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
