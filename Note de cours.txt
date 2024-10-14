@@ -302,8 +302,143 @@ runc lance les conteneurs à partir d'images de type oci. Ce principe s'adosse a
 Cgroups ou Control Group : limitation des ressources (CPU, mem, NW, disk, priorités) allouées aux processus
 Namespaces : isolation (PID, NW, Mount, IPC, UTS(Unix Time-Sharing))
 
+----- Les réseaux docker
+
+*Communication between containers or outside
+*Different types: bridge, host, none, overlay...
+*Please note that a container does not have a fixed IP (stop/start)
+
+Bridge par defaut : 
+
+	*bridge visible : ip a, ifconfig...
+	*default docker0 172.17.0.1 (configurable)
+	*docker inspect ...
+
+docker0, le bridge par défaut, permet de fournir des ips à chacun de vos conteneurs dans le reseau 172.17.0.1/16
+
+On peut voir le bridge avec "ip a", "ifconfig" ou "docker network ls" suivi de docker inspect <id du bridge>
 
 
+Le bridge (ex: docker0)est une couche logique, connectée à notre interface eth (physique ou vrituelle)
+Le bridge crée un réseau virtuel à l'intérieur de notre host. Le bridge crée ensuite une interface virtuelle pour chacun de nos conteneurs sous forme de veth (vethernet).
+Il sert aussi de gateway pour les autres veth
+
+sudo ifconfig docker0  : voir l'ip attribuée (172.17.0.1) au niveau de notre host (de notre gateway)
+
+
+docker run --name 1 -d debian sleep infinity
+docker exec -ti c1 bash
+ip a ou ifconfig   			: pour voir l'ip de l'eth du c1
+ping 172.17.0.1  			: pour pinger docker0					
+ping 8.8.8.8				: communication possible à l'exterieur du host
+
+NB: Si ip ou ifconfig ne sont pas disponibles comme commandes, faire :
+
+apt update
+apt install iputils-ping net-tools 
+
+----- Expose vs Publish
+
+Expose : Métadonnées d'une image prise en compte lors du lancement du conteneur 
+		Clause : EXPOSE ou  --expose 
+
+Publish : Mappage de ports soit : 
+		• aléatoire -P 
+		• defini -p
+
+L'expose reste une métadata. Ce qui ne signifie pas que notre applicatif écoute sur ce port
+La publication utilise l'expose 
+
+La publication consiste à mapper un port de notre host avec un port du conteneur.
+Ce mapping se fait de manière manuelle avec -p ou dynamique avec -P (ou publish all).
+La métadata est utilisée dans le cas aléatoire
+
+On peut faire correspondre le port 80 d'un conteneur nginx avec le port 8080 du host: on parle de publication de port
+NB: Il n'existe qu'un seul port de disponible pour notre host de port 80
+
+----------------
+Example:
+
+docker run -d --name c1 -p 8080:80 nginx:latest    	: Le 1er port est celui du host et le second pour c1
+sudo ifconfig eth1									: pour voir l'adresse de eth1 sur lequel est configuré le bridge (ici 192.168.20.120)
+
+curl 192.168.20.120:8080			: Le conteneur nginx c1 repond alors qu'il écoute sur le port 80
+
+
+docker run -d --name c2 -P nginx:latest
+docker ps
+   ...   :::32769->80/tcp				: Une adresse aleatoire a été attribuée et mappée au port c2 definie dans l'image avec EXPOSE
+
+curl 192.168.20.120:8080				: c2 répond
+----------------
+
+
+----   Réseau : IP variable
+
+Un conteneur n'a pas de IP fixe (stop/start). On peut fixer avec DNS ou API/Socket docker
+
+..........docker network : cmds générales ......
+
+docker network.Is/inspect/rm/create
+docker network connect/disconnect xxx yyy
+docker network inspect yyy
+..................................................
+
+...... Pour créer un réseau particulier et attribuer une adresse au conteneur, au lieu de laisser docker0 attribuer dynamiquement :
+
+docker network create mynet [options]
+docker run -d --network mynet nginx:latest
+
+example :
+
+docker network ls		: liste les reseaux actuels  [bridge : pour docker0]
+docker network create --driver=bridge --subnet=192.168.0.0/24 monreseau0 
+
+$ docker network ls
+
+NETWORK ID		NAME		DRIVER	SCOPE
+.....
+95a14ef9d256	monreseau0	bridge	local
+
+$ docker network inspect monreseau0
+$ docker run -d --name c1 --network monreseau0 nginx:latest
+$ docker run -d --name c2 --network monreseau0 nginx:latest
+$ docker exec -ti c2 bash
+ dans c2 :
+ apt update
+ apt install iputils-ping
+ ping c1
+ 64 bytes from c1.monreseau0 (192.168.0.2): icmp_seq=1 ttl=64 time=0.073 ms
+ 
+ NB: En utilisant docker0, on ne peut pas pinger c1 à partir de c2
+ 
+A partir de c2 utilisant docker0:
+
+	apt install net-tools
+	ifconfig
+		eth0: flags=4163<UP, BROADCAST,RUNNING,MULTICAST> mtu 1500
+			   inet 172.17.0.2 netmask 255.255.0.0 broadcast 172.17.255.255  : on dispose de docker0
+
+Rattachons c2 et c1 à monreseau0:
+
+$ docker network connect monreseau0 c2
+$ docker network connect monreseau0 c1
+$ docker inspect c2
+
+NB: Une nouvelle interface sera créée sur c1 et c2 pour monreseau0. Les interfaces pour docker0 sont toujours existantes
+
+# ping c1
+64 bytes from c1.monreseau0 (192.168.0.3): icmp_seq=1 ttl=64 time=0.083 ms
+
+............ Driver host
+
+$ docker run -d --name c3 --network host nginx:latest
+$ curl 127.0.0.1		: On a une reponse 
+$ docker inspect c3 	: Ne donne pas d'ip attribuée à c3 pourtant
+
+--> Si on fait ifconfig dans c3, on retrouve toutes les interfaces comme étant sur le host: on 
+	a bypassé le bridge du docker et on a accès à toutes les interfaces et ports directement du host.
+	Cette méthode est à éviter sauf dans des cas spécifiques
 
 
 
