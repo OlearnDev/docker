@@ -40,7 +40,7 @@ sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin dock
 
 ---- 
 sudo docker ps 					: voir les conteneurs actifs
-sudo docker ps -activation		: voir les conteneurs actifs ou pas
+sudo docker ps -a		: voir les conteneurs actifs ou pas
 sudo docker run nginx:latest	: check et lance un conteneur nginx si l'image existe localement sinon télécharge l'image nginx sur docker hub par défaut
 								  et rapatrie l'image localement
 
@@ -76,11 +76,158 @@ docker rm -f $(docker ps -q)	: supprime une liste de conteneurs suivant leurs id
 
 ------------ Les volumes
 
-• facile pour persister de la donnée
-• pratique pour faire des backups
-• partager entre de multiple conteneurs
-• multiconteneurs et permissions
-• locaux ou distants
+	• facile pour persister de la donnée
+	• pratique pour faire des backups
+	• partager entre de multiple conteneurs
+	• multiconteneurs et permissions
+	• locaux ou distants (nfs, samba, etc)
+
+docker volume ls 	: voir les volumes existants
+docker volume create myngnix	: créer un volume myngnix
+
+docker run -d --name c1 -v myngnix:/usr/share/nginx/html nginx:latest
+
+docker exec -ti c1 bash	: la commande qu'on veut passer au c1 en interactif. Ici on s'accroche en réalité au conteneur c1
+
+dans c1 : ls /usr/share/nginx/html
+
+docker volume inspect myngnix 	: voir le contenu du volume
+
+[
+	{
+		"CreatedAt": "2023-02-23T16:37:40Z",
+		"Driver": "local",
+		"Labels": null,
+		"Mountpoint": "/var/lib/docker/volumes/mynginx/_data",		: point de montage sur le host local en dehors du conteneur
+		"Name": "mynginx",
+		"Options": null,
+		"Scope": "local"
+	}
+]
+
+Si on ajoute/modifie un fichier dans /usr/share/nginx/html dans c1, on pourra voir cela en local dans /var/lib/docker/volumes/mynginx/_data
+
+On peut créer un debian c2 avec un autre point de montage, qui utilise le meme volume mynginx :
+
+docker run -ti --name c2 --rm -v myngnix:/data debian:latest bash
+si on fait "ls /data", on retrouve bien les fichiers dans /usr/share/nginx/html
+
+Toute modification à partir de c2 est visible aussi via c1
+
+docker volume rm mynginx 	: suppession du volume créé en local qui échoue car volume utilisé.
+							   Avant de supprimer, les conteneurs utilisant le volume doivent être supprimés ou au moins arrêtés
+							
+--------- Les types de volumes
+
+- Bind mount sous linux : permet de monter un rép dans un autre rép
+
+sudo mount --bind /data  /data2
+sudo findmnt 
+
+/data2 ..... /data			: data2 monté ou ayant sa source sur /data
+
+$ls /data2			: affiche le contenu de /data
+
+sudo umount /data2  : supprime le montage /data2
+
+--- Les types de volume dans docker :
+
+	Bind mount	  (persistant)
+	Volume docker (persistant)	: Cas déjà étudié
+	TMPFS
+
+Avec bind volume, on surcharge le conteneur avec un dossier, qui va donc écraser le contenu du rép dans le conteneur qui sera créé.
+Avec volume docker, c'est l'inverse : c'est le volume créé dans le conteneur qui écrit dans le volume local
+Avec tmpfs, on aura un espace de travail en memoire non persistant
+
+• -v ου --volume
+
+	• if volume name = volume
+	• if path = bind
+
+• --mount + type
+
+	• type = bind / volume / tmpfs
+
+--- Bind mount 
+
+	docker run -d --name cl
+  --mount type=bind,
+	source=/data/,
+	target=/usr/share/nginx/html
+	nginx:latest
+
+	Option: readonly /,readwrite
+
+docker run -d --name c1 --mount type=bind,source=/data/,destination=/usr/share/nginx/html/ nginx:latest
+docker exec -ti c1 bash
+
+dans c1:
+	ls /usr/share/nginx/html
+
+Si on fait en local :
+$ docker inspect c1 : On verra les infos sur la source et destination
+
+$ docker inspect --format "{{.Mounts}}" c1
+--> [{bind  /data /usr/share/nginx/html true rprivate}]
+
+
+---- Volume
+
+	docker run -d --name cl
+  --mount type=volume,
+	src=myvolume, target=/usr/share/nginx/html
+	nginx:latest
+
+$ docker volume create mynginx
+mynginx
+
+$ docker volume ls			: NB les volumes de type bind n'apparaissent pas dans la liste des volumes créés avec cette commande; pas managés par docker
+
+DRIVER 	VOLUME NAME
+local 	mynginx
+
+$ docker run -d --name c2 --mount type=volume,src=mynginx, destination=/usr/share/nginx/html nginx:latest
+
+$ docker exec -ti c2 bash
+
+root@7c735700047c:/# ls /usr/share/nginx/html/
+index.html
+
+---- TMPFS
+
+docker run -d --name cl
+
+  --mount type=tmpfs, 
+	destination=/usr/share/nginx/html 
+	nginx:latest
+
+$ docker run -d --name c3 --mount type=tmpfs,destination=/usr/share/nginx/html nginx:latest
+4543961077639ff6d389112c07ee3d6c9ffe9f886670d46b25a084202f7c117d
+
+$ docker exec -ti c3 bash
+
+root@45439b107763:/# echo toto > /usr/share/nginx/html/index.html
+root@45439b107763:/# cat /usr/share/nginx/html/index.html
+toto
+
+Si on supprime et recrée le conteneur avec la meme dest, on ne retrouve plus le fichier index.html créé
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
