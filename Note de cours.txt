@@ -531,7 +531,7 @@ docker1$ ip netns exec mynet curl 127.0.0.1:8080 ->  on a une reponse http car o
 ***************************************************
 
 
-
+------ Network bridge et namespaces  -----------------------
 
 
 
