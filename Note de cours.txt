@@ -533,28 +533,97 @@ docker1$ ip netns exec mynet curl 127.0.0.1:8080 ->  on a une reponse http car o
 
 ------ Network bridge et namespaces  -----------------------
 
+------ Docker commit : Permet de creer des images de manière pas trop clean -----------------------
+
+Peut etre utilisé pour un fixe rapide mais pas permanent
+Permet de tester et degugger
+Permet de faire des snapshots
+
+.............
+
+docker commit <conteneur> <image>
+
+Options :
+
+		•--author
+		• --message
+		• --pause
+
+................
+
+$ docker run -d --name c1 debian:latest sleep infinity
+$ docker exec -ti c1 bash
+
+dans c1 :
+
+#echo toto > /var/lib/test.txt
+#exit
+
+$ docker commit c1 myimage:v1.0.0
+$ docker images
+
+$ docker run -d --name c2 myimage:v1.0.0   : On lance un conteneur à partir de notre custom image
+
+NB: c2 est créé automatiquement avec sleep infinity comme c1
+
+$ docker exec -ti c2 bash
+#echo toto > /var/lib/test.txt   : On retrouve toto dans c2
+
+$ docker images
+$ docker inspect <id de myimage>  : On retrouve sleep infinity dans "cmd"
+
+On peut modifier l'image :
+
+$ docker commit --message "Add test.txt & sleep proc" --author john c1 myimage:v1.0.0
+
+$ docker inspect <id de myimage>  : On retrouve les infos de author et message
+$ docker history <id de myimage>  : historique de modification d'une image
 
 
+....les variables d'environnement
+
+$ docker exec -ti c1 bash
+
+#env
+HOSTNAME=69a8afbeda3f
+PWD=/
+HOME=/root
+TERME=xterm
+SHLVL=1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+_=/usr/bin/env
+
+#exit
+
+$ docker commit --change "ENV myenv=production" --message "Add test.txt & sleep proc" --author john c1 myimage:v1.0.1
+
+$ images docker
+
+REPOSITORY		TAG 			IMAGE ID		CREATED				SIZE
+mon image		v1.0.1			5cabaa7f0e29 	Il y a 3 secondes 	124 Mo
+mon image		v1.0.0			8aae5e1da414	Il y a 4 minutes	124 Mo
+...
+
+$ docker run -d --name c3 myimage:v1.0.1
+$ docker exec -ti c3 bash
+#env
+HOSTNAME=67bbe6a16ab4
+myenv=production			<----
+PWD=/
+HOME=/root
+TERME=xterm
+SHLVL=1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+_=/usr/bin/env
 
 
+#apt install git
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+$ docker commit c3 myimage-git:v1.0.0
+$ docker images
+$ docker run -d --name c4 myimage-git:v1.0.0
+$ docker exec -ti c4 bash
+#git 						<--- On a git installé dans c4
 
 
 
