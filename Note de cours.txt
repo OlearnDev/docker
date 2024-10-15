@@ -440,20 +440,95 @@ $ docker inspect c3 	: Ne donne pas d'ip attribuée à c3 pourtant
 	a bypassé le bridge du docker et on a accès à toutes les interfaces et ports directement du host.
 	Cette méthode est à éviter sauf dans des cas spécifiques
 
+----------- Reconfigurer Docker0
+
+On a tendance à reconfigurer docker0 pour conserver le range de ips utilisés par les conteneurs avec docker0
+
+Il suffit de configurer le moteur docker dans /etc/docker/daemon.json
+
+#ifconfig docker0		: voir l'ip de docker0
+
+On veut reconfigurer en 10.0.0.1
+
+#vim /etc/docker/daemon.json
+
+	{
+	"bip": "10.10.0.1/16
+	}
+
+#systemctl restart docker
+#ifconfig docker0	
+
+	docker0: flags=4099<UP,BROADCAST,MULTICAST> mtu 1500 inet 10.10.0.1 netmask 255.255.0.0
+			broadcast 10.10.255.255
+
+#docker run -d --name c1 debian:latest sleep infinity
+#docker inspect c1     : adresse de c1 en 10.0.02 avec gateway en 10.0.0.1
+
+Autre methode : avec un reseau custom toto
+
+#docker network create toto
+#docker network  inspect toto  : Il ne nous donne pas de nom de bridge associé à toto
+
+#docker network inspect bridge --> ceci nous donne dans "Options" "com.docker.network.bridge.name": "docker0"
+
+Si on crée un autre reseau titi avec :
+
+# docker network create -o com.docker.network.bridge.name :"titi" titi
+#ifconfig 		: donne un nom de bridge "titi"
+
+--------- vethernet et namespace
+
+vethernet : c'est un cable virtuel
+
+On veut brancher ce cable sur une interface du conteneur et un autre bout sur notre bridge
+
+Si on fait ifconfig sur le host, on verra une interface veth*** pour le c1. 
+Mais l'adresse mac associée sera differente de celle dans "docker network inspect c1"
+
+------ Network namespace  -----------------------
 
 
+.................. Resumé
+# create a network namespace
+ip netns ls
+ip netns add alpine_network
+ip netns ls
+ip netns exec alpine_network ls
+ip netns exec alpine_network python3 -m http.server 8000
+ip -netns alpine_network a
+ip netns exec alpine_network ip link set lo up
+ip netns exec alpine_network curl 127.0.0.1:8000
+..................
 
+#ip netns ls		: renvoie vide comme liste de namespaces
+#ip netns add mynet
+#ip netns ls	
+		..> mynet			: On peut lancer des commandes à l'intérieur de ce namspace
+#ip netns exec mynet ls		: renvoie des fichiers dans le rep courant comme sans un ns 
 
+docker1# ip netns exec mynet python3 -m http.server 8080   -> lancement d'un server web avec python
+Serving HTTP on :: port 8080 (http://[::]:8080/) ...
 
+************ Si on se connecte dans un autre terminal à la même machine virtuelle docker1 du dessus :
 
+$v ssh docker1
+docker1$ curl 127.0.0.1:8080   --> Connection refused car la commande non exécutée dans le bon ns, une isolation reseau a été faite
 
+Pour vérifier cela, nous allons lancer dans le même ns :
 
+docker1$ ip netns exec mynet curl 127.0.0.1:8080
+curl: (7) Couldn't connect to server         ---> L'erreur ici est liée au loopbackup non up dans ns
 
+# ip netns exec mynet ip a
+1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN group default qlen 1000   : on a seulement une loopback down
 
+#ip netns exec mynet ip link set lo up
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default glen 1000 : loopback est up
 
+docker1$ ip netns exec mynet curl 127.0.0.1:8080 ->  on a une reponse http car on est dans ns où on a lancé un serveur web utilisant le port 8080
 
-
-
+***************************************************
 
 
 
