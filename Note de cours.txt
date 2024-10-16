@@ -1,5 +1,8 @@
 ---- Dockers et conteneurs ----------- https://www.youtube.com/watch?v=AWJG-AbGFik&list=PLn6POgpklwWq0iz59-px2z-qjDdZKEvWd&index=2
 
+Source github : https://gitlab.com/xavki/docker-v2/-/tree/main?ref_type=heads
+
+
 conteneur : processus pour faire tourner l'image
 
 Image = package de code et déendance, inactif, stocké sur un registry distant tq docker hub (par defaut).
@@ -626,40 +629,194 @@ $ docker exec -ti c4 bash
 #git 						<--- On a git installé dans c4
 
 
+-------------- Dockerfile ----------------------------
+
+	• comme une recette de cuisine... ou un makefile 
+	• packager et livrer une application /!\ pour une architecture
+	• préparer son déploiement en conteneur
+
+3 étapes :
+
+	• choisir une image de départ (sauf cas particulier)
+	• une suite d'instructions
+	• processus principal lancé dans le conteneur
+
+Quelques conventions :
+
+	• les commentaires avec des #
+	• les INSTRUCTIONS en majuscules
+	• les arguments en minuscules
+	• parsers :
+		#syntaxe=docker/dockerfile:1
+		#escape=\
+	• .dockerignore
+
+Les instructions
+
+	FROM
+
+	• le plus souvent en premier
+	• la source de l'image ou FROM scratch
+
+	Ex: FROM debian:bullseye-slim
+
+	WORKDIR
+
+	• répertoire de travail dans le cadre du build
+	• plusieurs possible au cours du build
+
+	Ex: WORKDIR /app
+	
+	ARG
+
+	• définir des variables de build
+	• peut être en premier (tag...)
+
+	Ex : ARG clef valeur
+	
+	ENV
+
+	• définir des variables d'environnement (build + conteneur)
+
+	Ex : ENV environment=production
+
+	USER
+
+	• l'utilisateur utilisé pour les commandes suivantes
+	• important de définir le user qui lance le process
+
+	Ex : USER toto
+
+	ADD
+
+	• ajout dans l'image de fichiers ou répertoires
+	• peut être une url, dépôt git...
+	• options additionnelles (--chown...)
+
+	Ex: ADD config/ /etc/config/
+
+	COPY
+
+	• ajout de fichiers ou répertoires
+	• plus securisé car source non distante
+	• options additionnelles (--chown...)
+
+	Ex: COPY config/  /etc/config/
+
+	RUN
+
+	• lancer des commandes shell
+	• astuces sur les layers (autre tuto)
+	• options additionnelles (--mount...)
+
+	Ex: RUN apt update && apt install git
+
+	CMD
+
+	• commande lancée dans le conteneur
+	• sous forme de liste
+	• peut être surchargée par entrypoint
+
+	Ex: CMD [ "python3", "-m", "flask", "run"]
+
+	ENRTYPOINT
+
+	• commande lancée dans le conteneur
+	• sous forme de liste
+	• peut être surchargée par CMD
+
+	Ex: ENRTYPOINT [ "python3", "-m", "flask", "run"]
+
+	LABEL
+
+	• ajout de labels dans les metadatas de l'image
+
+	Ex : LABEL key=value
 
 
+	EXPOSE
+
+	• déclaration des ports en écoute par le processus
+	• plusieurs lignes possibles
+	• cf tuto sur le publish-all 
+
+	Ex : EXPOSE 80/tcp
+
+	VOLUME
+
+	• déclare les volumes de manière séparés (docker inspect ...)
+	• liste
+
+	Ex: VOLUME ["/var/www", "/var/log /apache2", "/etc/apache2"]
+
+..... Demo: appl flask en python 
+$vim app.py
+
+from flask import Flask
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Hello Docker !!"
+
+:x!
+
+Nous devons flask dans l'image. On le fait comme en dehors d'un conteneur ou install standard :
+
+$vim requirements
+
+Flask==2.2.3
+
+:x!
+
+On crée notre dockerfile :
+
+$vim Dockerfile
+
+FROM python:slim-bullseye
+LABEL version=v1.0.0
+LABEL app=xavki-app
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=dev
+WORKDIR /app
+COPY . .									<--- Les fichiers à côté de Dockerfile seront copiés dans notre image. Dans une bonne pratique, utilier .dockerignore
+RUN pip3 install -r requirements.txt
+COPY index.html .
+EXPOSE 5000									<--- Port d'écoute par défaut de Flask
+CMD ["flask", "run", "--host=0.0.0.0"]		<--- La valeur de host permet d'écouter sur toutes les interfaces
+
+$docker build -t myimage:v1.0.0. .      : Permet de definir le build e notre image. On peut definir plusieurs noms d'images sur cette ligne tq myimage:latest.
+										  Le . à la fin indique qu'on veut utiliser le fichier Dockerfile dans le rep courant. On peut specifier un autre endroit pour le Dockerfile
 
 
+vagrant@docker1:~$ images docker
+
+REPOSITORY		TAG 			IMAGE ID		CREATED				SIZE
+myimage			v1.0.0			1a8ff10dc162	Il y a 34 secondes	144 Mo
+
+$docker run -d --name c1 myimage:v1.0.0
+$docker ps
+$docker log c1
+	....
+	* Serving Flask app 'app.py'
+	* Debug mode : off
+	....
+	* Running on all adresses (0.0.0.0)
+	* Running on http://127.0.0.1:5000
+	* Running on http://10.10.0.2:5000
+	
+$curl http://10.10.0.2:5000
+	--> Hello Docker
+
+$docker inspect myimage:v1.0.0
+
+$docker exec -ti c1 bash
+/app# ls 												<-- Rep par defaut dans /app. Connecté en tant que root car USER pas défini
+Dockerfile	_pycache_ application.py exigences.txt
+
+/app# env							: liste toutes les variables d'env
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+-------- Les layers ------------------------------------------------------------------
 
 
 
