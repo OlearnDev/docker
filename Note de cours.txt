@@ -1072,5 +1072,146 @@ On peut voir ce qui est configuré comme instruction CMD/ENTRYPOINT avec :
 $ docker history myimg:v1.0.0   ou 
 $ docker inspect  myimg:v1.0.0
 
---------------
+-------------- Dockerfile de type MultiStage -----
+
+Permet de builder une image à partir de plusieurs FROM aux qualites spécifiques. Utile aussi pour :
+
+	- Taille de l'image
+	- Sécurité
+	- Astuces > Conditions 
+
+......... Ex 1 : utilisation de 3 images identiques
+
+$vim Dockerfile
+FROM alpine:3.17.3 AS git
+RUN echo "xavki" >  /var/xavki.1
+
+FROM alpine:3.17.3 AS builder
+RUN echo "xavki" > /var/xavki.2
+COPY --from=0 /var/xavki.1 /
+#COPY --from=git /var/xavki.1 /
+
+FROM alpine:3.17.3 AS final
+RUN echo "xavki" > /var/xavki.3
+COPY --from=1 /var/xavki.2 /
+#COPY --from=builder /var/xavki.2 /
+
+:x!
+
+$ docker build -t app:1.0.0 .
+$ docker images
+
+$ docker run --rm app:1.0.0 sh
+
+#ls
+--> xavki.2
+
+#ls /var
+--> xavki.3
+
+
+
+......... Ex 2 : On veut recuperer un elt dans l'image. Ici on recupere nginx.conf dans /etc
+
+FROM nginx:1.24 AS local_nginx
+
+FROM alpine:3.17.3 AS x2
+RUN echo "xavki" > /var/xavki.2
+COPY --from=local_nginx /etc/nginx/nginx.conf /etc
+
+$ docker build -t app:1.0.0 .
+$ docker run --rm app:1.0.0 sh
+
+#ls /etc
+--> nginx.conf
+
+
+......... Ex 3 : Go lang (Go est un langage compilé)
+
+$vim main.go
+
+package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "Hello, World!")
+	})
+
+	http.ListenAndServe(":8080", nil)
+}
+
+:x!
+
+$ go mod init hello 
+
+On va editer un dockerfile qui va reprendre notre go
+
+$vim Dockerfile
+
+FROM golang:1.20.4 AS builder
+
+WORKDIR /app
+COPY go.mod ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .    <-- l'application binaire sera app
+
+FROM alpine:3.17.3     					<--- On pouvait utiliser FROM scratch pour reduire la taille de l'image
+COPY --from=builder /app/app /app/app
+WORKDIR /app
+EXPOSE 8080
+CMD ["./app"]
+
+:x!
+
+$ docker build -t app:1.0.0 
+$ docker run -d --name c1 -ti app:1.0.0
+$ docker inspect c1   <--- On recupere l'ip de c1 pour lancer un curl dessus
+
+$ curl 10.10.0.2:8080/hello
+--> Hello, World!
+
+
+............. Creer un Dockerfile parametré pour DEV et PROD
+
+ARG TYPE=development
+
+FROM alpine:3.17.3 AS base 
+RUN echo "Je suis la base" > /var/xavki.txt
+
+FROM base AS branche-version-development
+RUN echo "dev" >> /var/xavki.txt
+ENV ENV=development
+
+FROM base AS branche-version-production 
+RUN echo "production" >> /var/xavki.txt 
+ENV ENV=production
+
+FROM branche-version-${TYPE} AS final 
+RUN echo "point final" >> /var/xavki.txt
+
+:x!
+
+$ docker build -t app:1.0.0 --build-arg TYPE=development .
+$ docker run --rm --name c1 -ti app:1.0.0 sh
+
+# cat /var/xavki.txt
+Je suis la base
+dev
+point final
+
+$ docker build -t app:1.0.0 --build-arg TYPE=production .
+$ docker run --rm --name c1 -ti app:1.0.0 sh
+
+# cat /var/xavki.txt
+Je suis la base
+production
+point final
+
+
 
