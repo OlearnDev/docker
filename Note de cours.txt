@@ -818,33 +818,204 @@ Dockerfile	_pycache_ application.py exigences.txt
 
 -------- Les layers ------------------------------------------------------------------
 
+	• constitution d'une image (instructions)
+	• optimisation pour les caches
+	• utilisation du COW (Copy On Write)
+	• les secrets vs les images
+
+Elements importants :
+
+	• optimisation de la taille de l'image
+	  - regrouper la création avec suppression
+
+	• optimisation du cache des layers
+	  - fractionner/ordonner pour bénéficier du cache
+	  
+	• attention aux secrets (c'est MAL !!!)
+
+Avec les layers, docker checke si les layers de l'image à construire sont déjà présentes en local 
+et les skip si trouvés
 
 
+....1er exemple : Le mauvais cas de creation de Dockerfile
+
+$vim Dockerfile
+
+FROM docker.io/debian:bullseye-slim
+RUN apt update -qq 
+RUN apt install -qq -y wget 
+RUN apt clean 
+RUN rm -rf /var/lib/apt/lists/*
+RUN wget http://xcal1.vodafone.co.uk/10MB.zip 
+RUN rm -f 10MB.zip
+
+:x!
+
+$ docker build -t myimage:v1.0.0 .
+$ docker image ls
+
+REPOSITORY		TAG 			IMAGE ID		CREATED				SIZE
+myimage			v1.0.0			d0ae29a9a224	Il y a 43 minutes	113 Mo
+
+$ docker history myimage:v1.0.0			<--- Donne les cmds de creation de l'image
+
+Dans ce cas, on voit plusieurs couches (lignes de commandes) qui peuvent être regroupées
+
+.............. 2e exemple # Mieux...
+
+$vim Dockerfile2
+
+FROM docker.io/debian:bullseye-slim
+RUN apt update -qq && apt install -qq -y wget && apt clean && rm -rf /var/lib/apt/lists/*
+RUN wget http://xcal1.vodafone.co.uk/10MB.zip && rm -f 10MB.zip
+
+:x!
+
+$ docker build -t myimage:v1.0.0 -f Dockerfile2 .
 
 
+root@docker1:/home/vagrant# images docker
 
+REPOSITORY		TAG 			IMAGE ID		CREATED				SIZE
+myimage			v1.0.0			424b8e4d9c7a	Il y a 45 minutes	84,6 Mo
+<aucun>			<aucun>			d0ae29a9a224	Il y a 47 minutes	113 Mo
 
+On a l'ancienne image qui fait 113M et la nouvelle un peu optimisée qui fait 84M
 
+$ docker history myimage:v1.0.0
 
+........... Utilisation de secret ...
 
+$vim Dockerfile2
 
+FROM docker.io/debian:bullseye-slim
+RUN echo "monsecret" > toto.txt
+RUN rm toto.txt						<--- On utilise un secret qu'on supprime dans un layer different
 
+:x!
 
+$ docker build -t myimage:v1.0.0 -f Dockerfile3 .
 
+$ docker history myimage:v1.0.0    : On verra que le layer d'ajout de secret genere une taille non nulle 
 
+--> Si un hacker a accès au id de l'image associée au layer d'ajout de secret, il pourra lancer un conteneur avec cet id 
 
+Nous avons vu jusque là, la partie readonly des layers. Voyons la partie conteneur ou la couche d'ecriture :
 
+$ docker run -d --name c1 myimage:v1.0.0 debian:latest sleep infinity
+$ docker exec -ti c1 bash
 
+#touch titi.txt
+#exit
 
+$ docker diff c1     : permet de visualiser les evolutions des commandes dans le conteneur
+$ docker inspect myimage:v1.0.0  : permet de voir les layers de l'image
 
+NB: Pour beneficier du cache le plus possible, il est important de bien executer les instructions dans l'ordre.
+Une petite modification d'instruction invalide le cache
 
+----------------------- Les bonnes pratiques ------------
+1. Choisir une image légère && minimalist (multistage plus tard)
 
+2. Définir précisément le tag de image ou le digest
 
+3. Suppression des caches APT, APK... && /var/cache/xxx
 
+4. Grouper les layers (surtout pour les installations et utiliser && \)
 
+5. Utiliser .dockerignore (secrets, fichiers sensibles et inutiles...)
 
+6. Utiliser plutôt COPY à la place de ADD (datas exterieures)
 
+7. Créer un utilisateur par défaut
 
+8. Utiliser cet utilisateur aux bons endroits USER && CMD
+
+9. Supprimer éventuellement des éléments installés (avec précision)
+
+10. Eviter à tout prix le tag latest
+
+11. Vérifier le FROM (registries vérifiées, image maintenue, contrôle des couches)
+
+12. Ou pousser ? registry publique ou privée
+
+13. Eviter le monolith : bases de données + apps + statics...
+
+14. Utiliser un linter
+
+https://hadolint.github.io/hadolint/
+https://github.com/hadolint/hadolint
+docker run --rm -i hadolint/hadolint < Dockerfile
+
+15. Ne pas pousser des secrets dedans (mot de passe, clefs, certificats...)
+
+16. Variabiliser qunad même...
+
+17. Eviter les outils de debug qui souvent sont néfastes pour la sécu (telnet, tcpdump, netcat...)
+
+18. Définir des règles sur les labels (standardiser: équipes, langage, version...)
+
+19. Vérifier la vulnérabilité (Clair, Falco...)
+
+20. Méfiez vous des COPY vraiment...
+
+21. Définir un WORKDIR
+
+22. Vérifier la possiblité du multistage-build
+
+23. Versionner c bien... et maintenir c mieux !!!
+
+.......... Exemple de Dockerfile :
+
+FROM python@sha256:2659ee0e84fab5bd62a4d9cbe5b6750285e79d6d6ec00d8e128352dad956f096
+
+# Labels
+LABEL version=v1.0.0
+LABEL owner=John-app
+
+# Env vars
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=dev
+
+ARG APP_USER=John
+
+# Create a dedicated user
+
+RUN adduser -D ${APP_USER}
+
+# Directory
+WORKDIR /app
+
+# Copy & install requirements
+RUN apk add --no-cache curl=8.0.1-r0
+
+USER ${APP_USER}:${APP_USER}
+COPY --chown=${APP_USER}  requirements.txt requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy all files
+COPY --chown=${APP_USER} . .
+
+# Expose port
+EXPOSE 5000
+
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0"]
+
+:x!
+
+.....................
+
+Creation d'image app à partir de notre fichier Dockerfile :
+
+$ docker build -t app:v1.0.0
+$ docker images
+$ docker image inspect app:v1.0.0
+
+$ docker run -d --name c1 -p 80:5000 app:v1.0.0
+$ curl 127.0.0.1
+--> Hello Toto
+
+$ docker logs c1
 
 
 
