@@ -1213,5 +1213,7 @@ Je suis la base
 production
 point final
 
+------ Docker Registry -----------------
+
 
 
