@@ -1215,5 +1215,116 @@ point final
 
 ------ Docker Registry -----------------
 
+$ mkdir /{registry,certs,auth}
+
+registry : permet de stocker les données de notre registry docker (aura la forme d'un conteneur docker)
+cert : pour stocker des certificats
+auth : fichier passwd 
+
+Création de clé auto signée (valable pour 365 jours):
+
+$ openssl req -newkey rsa:4096 -nodes -sha256 -keyout /certs/registry.xavki.local.key -addext "subjectAltName = DNS:registry.xavki.local" -x509 -days 365 -out /certs/registry.xavki.local.crt
+
+....Common name : registry.xavki.local
+
+# ls /certs/ 
+register.xavki.local.crt register.xavki.local.key
+
+A partir d'une autre machine :
+
+$ sudo vim /etc/ssl/certs/registry.xavki.local.crt
+...> Copier ici le contenu de $ cat /certs/*.crt
+
+Configuration de daemon.json:
+
+$ cat /etc/docker/daemon.json
+{
+  "insecure-registries" : ["registry.xavki.gitlab:5050","registry.xavki.local:443"]
+}
+
+Ajout le registry dans /etc/hosts car on n'a pas de dns configuré :
+
+v$ i /etc/hosts
+
+192.168.20.120 registry.xavki.local
+
+$sudo systemctl restart docker
+
+Installation de la registry docker :
+
+$ docker run -d --restart=always --name registry -v /certs:/certs -v /registry/:/registry/ -e REGISTRY_HTTP_ADDR=0.0.0.0:443 -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.xavki.local.crt -e REGISTRY_HTTP_TLS_KEY=/certs/registry.xavki.local.key -e REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/registry/ -p 443:443 registry:2
+
+NB: En production, utilise "docker compose" au lieu de "dicker run"
+
+--restart : permet de restart le conteneur si arrêté 
+-v /certs:/certs : monte /certs du host sur celui du conteneur
+-e REGISTRY_HTTP_ADDR=0.0.0.0:443 : On active le port 443 et on écoute sur toutes les interfaces
+-e REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/registry/ : lieu de stockage de notre data
+-p 443:443  : exposition du port 443 pour être accessible du conteneur et du host
+registry:2   : image registry version 2
+
+Check avec ip du conteneur :
+
+curl -sSL --insecure https://172.17.0.2:443/v2/_catalog
+
+... {"repositories":[]}    : affiche la liste des images docker  (vide actu)
+
+Même resultat avec :
+curl -sSL --insecure https://registry.xavki.local/v2/_catalog
+... {"repositories":[]} 
+
+$ docker images 
+
+DEPOSIT					TAG 	IMAGE ID		CREATED		SIZE
+excalidraw/excalidraw	latest	da902622fc40	6 days ago	35.5 MB
+
+Pour pousser cette image dans notre registry locale : préfixer le nom par le dns de votre registry (retagger)
+
+$ docker tag excalidraw/excalidraw:latest register.xavki.local/my image:v1.0.0
+
+$ docker images 
+
+DEPOSIT					TAG 	IMAGE ID		CREATED		SIZE
+excalidraw/excalidraw			latest	da902622fc40	6 days ago	35.5 MB
+registry.xavki.local/myimage 	v1.0.0 	da902622fc40 	6 days ago	35.5MB
+
+$ docker push registry.xavki.local/myimage:v1.0.0	---> Pour pousser l'image dans la registry
+
+$ curl -sSL --insecure https://registry.xavki.local/v2/_catalog
+... {"repositories":["myimage"]} 
+
+$ curl -sSL --insecure https://registry.xavki.local/v2/myimage/tags/list
+
+{"name":"myimage","tags":["v1.0.0"]}
+
+
+.... Utilisation d'authentification dans notre registry :
+cd /
+docker run --entrypoint htpasswd httpd:2 -Bbn xavki password > auth/htpasswd    : On surcharge entrypoint avec htpasswd
+
+$ docker rm -f registry
+$ docker  ps
+(vide)
+
+On va recreer notre registry avec d'autres options :
+
+$ docker run -d --restart=always --name registry -v /certs:/certs -v /auth/:/auth -v /registry/:/registry/ -e REGISTRY_AUTH=htpasswd -e REGISTRY_AUTH_HTPASSWD_REALM="Registry Realm" -e REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd -e REGISTRY_HTTP_ADDR=0.0.0.0:443 -e REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.xavki.local.crt -e REGISTRY_HTTP_TLS_KEY=/certs/registry.xavki.local.key -e REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/registry/ -p 443:443 registry:2
+
+$ docker tag excalidraw/excalidraw:latest registry.xavki.local/myimage2:v1.0.0
+$ docker push registry.xavki.local/myimage2:v1.0.0
+
+$ docker login registry.xavki.local
+----> Demande de saisie de username et password
+
+$ docker push registry.xavki.local/myimage2:v1.0.0
+
+
+
+
+
+
+
+
+
 
 
