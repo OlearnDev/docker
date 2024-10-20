@@ -1,0 +1,51 @@
+-----------------  Kubernetes -----------------  
+
++- initialization du master
+
+$ kubeadm init-apiserver-advertise-address=192.168.56.101 --node-name $HOSTNAME-pod-network-cidr=10.244.0.0/16
+
++- creation of the configuration file : utilisé par kubectl
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+............. Mise en place du réseau interne choix de flannel(utilisé pour des tests perso)
+
++- Ajout pod pour gestion du réseau interne
+
+$sysctl net.bridge.bridge-nf-call-iptables=1	(sur master et node) : Permet à k8s de faire un bridge et gerer iptables
+
+Creation de reseau flannel, lancer les pods
+$ kubectl apply - f https://raw.githubusercontent.com/coreos/flannel/a70459be0084506e4ec919aa1c114638878db11b/Documentation/kube-flannel.yml		
+				
+-+- we check the status of the system pods:
+
+kubectl get pods  -all-namespaces
+kubectl get nodes
+
+#si nécessaire
+
+kubectl edit cm -n kube-system kube-flannel-cfg	: Modification du fichier en ligne
+---> Modifier la ligne "Network":"10.244.0.0/16"  à "10.10.0.0/16"   : pour dashboard
+
+kubmaster:~# kubectl get nodes
+
+NAME		STATUS	ROLES		AGE		VERSION
+kubmaster	Ready	master		7m29s	v1.14.1
+
++- Sur le node : Permet au node join le master à travers son token:
+
+kubeadm join 192.168.56.101:6443 --token 5q8bsc.141bc9wjsc026u6 --discovery-token-ca-cert-hash sha256:e0f57e3f3055bfe4330d9e93cbd8de967dde4e4a0963f324d2fe0ccf8427fcfb
+
+kubectl get pods  -all-namespaces   --> s'assurer que tous les nodes sont en running
+
+kubmaster:~# kubectl get nodes
+
+NAME		STATUS	ROLES		AGE		VERSION
+kubmaster	Ready	master		9m45s	v1.14.1
+kubnode		Ready	<none>		98s		v1.14.1
+
+kubmaster:~# docker ps 		: donne plusieurs clusters issus de k8s au niveau master et bcp moins au niveau du node
+
+NB : Un pod peut être constitué de plusieurs conteneurs
