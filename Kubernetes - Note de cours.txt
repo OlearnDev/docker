@@ -34,7 +34,7 @@ kubmaster:~# kubectl get nodes
 NAME		STATUS	ROLES		AGE		VERSION
 kubmaster	Ready	master		7m29s	v1.14.1
 
-+- Sur le node : Permet au node join le master à travers son token:
++- Sur le node : Permet au node de join le master à travers son token:
 
 kubeadm join 192.168.56.101:6443 --token 5q8bsc.141bc9wjsc026u6 --discovery-token-ca-cert-hash sha256:e0f57e3f3055bfe4330d9e93cbd8de967dde4e4a0963f324d2fe0ccf8427fcfb
 
@@ -49,3 +49,99 @@ kubnode		Ready	<none>		98s		v1.14.1
 kubmaster:~# docker ps 		: donne plusieurs clusters issus de k8s au niveau master et bcp moins au niveau du node
 
 NB : Un pod peut être constitué de plusieurs conteneurs
+
+----- Diagnostic avec vagrant : pour aider à regler les soucis reseau avec virtualbox et vagrant
+
+kubmaster:~# kubectl get nodes -o wide 	: Donne des détails sur le reseau configuré
+
+Exple : si les 2 ips sont identiques (master et node), il faudra corriger sinon non joignables 
+
++-  Modifier /etc/hosts des machines master et les noeuds et ajouter l'ip de la machine en cours reconnue par kubernetes
+
+	Ajouter ip suivi du nom de la machine dans kub sur tous les noeuds
+	192.168.99.100 kubmaster
+
++- puis supprimer les pods flannel
+
++- ils vont se reconstruire en prenant en compte la modification
+
+kubectl get pods -n kube-system
+
+kubectl delete pods flannel-xxx -n kube-system
+
+Autant de fois que de pods
+
+
+---------- Kubernetes : autocomplete, alias, accès distant
+
+
+
+AutoComplétion 
+
++- disposer de l'autocomplétion :
+
+prérequis :
+
+apt-get installe bash-completion
+
+mise en place :
+
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+
+$ source .bashrc
+
+...... Alias bashrc
+
+alias k='kubectl'
+alias kcc='kubectl config contexte-actuel'
+alias kg='kubectl get'
+alias kga='kubectl get all --all-namespaces'
+alias kgp='kubectl get pods'
+alias kgs='kubectl get services'
+alias ksgp='kubectl get pods -n kube-system'
+alias kuc='kubectl config use-context'
+
+
+Kubectl à distance
+
++- access the cluster remotely
+
+#install kubectl
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add sudo add-apt-repository "deb http://apt.kubernetes.io/ kubernetes-xenial main" sudo apt-get install kubectl
+
+# create directory 
+mkdir ~/.kube
+
+#copy token
+ssh user@master "sudo cat /etc/kubernetes/admin.conf" >.kube/config
+
+------- Kubernetes : parallèle avec Docker 
+
+kubectl run myshell -it--image busybox sh    --> On se connecte à un conteneur. Docker utilisé en arrière plan
+
+# hostname
+myshell-779886cfcb-rn6fz
+
+# docker ps 		--> sur le node pour voir le conteneur car les pods non systèmes sont visibles sur les nodes
+# docker images   
+--> image busybox  listée
+kubectl run anothershell -it--image busybox sh
+
+root@kubmaster:~# kubectl get pods
+
+NAME						READY		STATUS		RESTARTS	AGE	
+myshell-779886cfcb-rn6fz	1/1			Running		1			3m16s
+
+root@kubmaster:~# kubectl delete pods myshell-779886cfcb-rn6fz
+pod "myshell-779886cfcb-rn6fz" deleted
+
+NB : En suppirmant le pod de cette manière, il se recrée automatiquement car les pods font partir de déploiements
+et surveillés par kubernetes pour les rendre running
+
+root@kubmaster:~# kubectl get deploy
+
+NAME	READY UP-TO-DATE	AVAILABLE	AGE
+myshell	1/1		1			1			6m26s
+
+root@kubmaster:~# kubectl delete deploy myshell	: supprime complètement myshell
+
