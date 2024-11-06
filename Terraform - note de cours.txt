@@ -1,0 +1,280 @@
+Terraform : Stockage des variables 
+
+Elles sont définies à plusieurs niveaux : environnement > fichier spécifique +
+
+- ordre des variables :
+
+-1 environnement
+-2 fichier : terraform.tfvars 
+-3 fichier json terraform.tfvars.json 
+-4 fichier *.auto.tfvars ou *.auto.tfvars.json 
+-5 CLI : -var ou var-file 
+
+-1 environnement: 
+export TF_VAR_str="env" 
+terraform apply
+
+-2 fichier terraform.tfvars 
+echo 'str="terraform" > terraform.tfvars
+
+-5 Avec -var ou -var-file
+#terraform apply -var 'str="var"'
+#terraform apply -var-file monfichier.tfvars   (monfichier.tfvars fichier contenant des vars)
+
+
+----------- Terraform: Remote Execution / SSH
+
+remote_exec > local_exec remote (ssh)
+
+# vim main.tf
+
+variable "ssh_host" {}
+variable "ssh_user" {}
+variable "ssh_key" {}
+resource "null_resource" "ssh_target" {
+	connection {
+		type = "ssh"
+		user = var.ssh_user
+		host = var.ssh_host
+		private_key = file(var.ssh_key)			--file("/root/.ssh/id_rsa")
+		}
+provisioner "remote-exec" {
+	inline = [
+	"sudo apt update -qq >/dev/null",
+	"sudo apt install -qq-y nginx >/dev/null"
+	]
+  }
+}
+
+EOF
+
+# ssh-keygen -b 2048
+# vim terraform.tfvars
+
+ssh_key  = "/home/vagrant/.ssh/id_rsa" 
+ssh_user = "vagrant" 
+ssh_host = "192.168.21.103"   --) Machine target
+
+EOF
+
+# cat ~/.ssh/id_rsa.pub
+	-- ) Copier le contenu dans authorized_key sur target machine
+	
+# sudo chown -R toto:toto .terraform
+# terraform init
+# terraform plan
+# terraform apply
+
+	--) Connection et installation de nginx comme indiqué dans le provisionerer
+
+# curl 192.168.21.103   --) nginx répond
+
+On peut vérifier nginx installé sur remote machine avec :
+
+# service nginx status
+
+
+---------------------- Autre exemple : Modifier main.tf pour copier un fichier de config de nginx
+# vim main.tf
+
+variable "ssh_host" {}
+variable "ssh_user" {}
+variable "ssh_key" {}
+resource "null_resource" "ssh_target" {
+	connection {
+		type = "ssh"
+		user = var.ssh_user
+		host = var.ssh_host
+		private_key = file(var.ssh_key)			--file("/root/.ssh/id_rsa")
+		}
+provisioner "remote-exec" {
+	inline = [
+	"sudo apt update -qq >/dev/null",
+	"sudo apt install -qq-y nginx >/dev/null"
+	]
+  }
+}
+
+
+provisioner "file" {
+	source = "nginx.conf"
+	destination = "/tmp/default"
+	}
+
+provisioner "remote-exec" {
+inline = [
+	"sudo cp -a /tmp/default 1/etc/nginx/sites-available/default",
+	"sudo systemctl restart nginx"
+	]
+}
+
+provisioner "local-exec" {
+	command = "curl ${var.ssh_host}:667"
+	}
+}
+
+output "host" {
+	value = var.ssh_host
+}
+
+output "user" {
+	value = var.ssh_user
+}
+
+output "key" {
+	value = var.ssh key
+}
+EOF
+
+# terraform apply
+
+---------------------- Autre exemple : Remote exec pour installer docker & socket 
+# vim main.tf
+
+variable "ssh host"
+variable "ssh_user" {}
+variable "ssh_key" {}
+
+resource "null_resource" "ssh_target" {
+	connection {
+		type = "ssh"
+		user = var.ssh_user
+		host = var.ssh_host
+		private_key = file(var.ssh_key)
+	}
+
+	provisioner "remote-exec" {
+		inline = [
+			"sudo apt update -qq >/dev/null",
+			"curl -fsSL https://get.docker.com-o get-docker.sh",
+			"sudo chmod 755 get-docker.sh" "sudo ./get-docker.sh >/dev/null"
+		]
+
+	}
+
+	provision "file" {
+		source = "startup-options.conf"
+		destination = "/tmp/startup-options.conf"
+	}
+
+	provisioner "remote-exec" {
+	inline = [
+		"sudo mkdir -p /etc/systemd/system/docker.service.d/",
+		"sudo cp /tmp/startup-options.conf /etc/systemd/system/docker.service.d/startup_options.conf",
+		"sudo systemctl daemon-reload",
+		"sudo systemctl restart docker", "sudo usermod -aG docker vagrant"
+	]
+	}
+}
+output "host" {
+value = var.ssh_host
+}
+output "user" {
+value = var.ssh_user
+}
+
+EOF
+
+# vim terraform.tfvars
+
+ssh_key  = "/home/vagrant/.ssh/id_rsa
+ssh_user = "vagrant"
+ssh_host = "192.168.21.103"
+
+EOF
+
+# terraform init
+# terraform plan
+# terraform apply -auto-approved  --) : Eviter de taper YES pour executer
+
+Vérifier docker installé sur la machine distante avec "docker ps"
+
+---- Docker provider 
+
+Activation de la socket docker (pas recommandé côté sécurité):
+
+cat /etc/systemd/system/docker.service.d/startup_options.conf
+[Service] 
+ExecStart=
+ExecStart=/usr/bin/dockerd -H tcp://192.168.21.103:2375 -H unix:///var/run/docker.sock
+
+sudo systemctl daemon-reload 
+sudo systemctl restart docker
+
++- test
+
+docker H 192.168.21.103:2375 ps -a
+
++- provider declaration
+
+provider "docker" {
+	host = "tcp://192.168.21.103:2375"
+}
+
+Rq possible by unix socket
+
++- upload an image
+
+resource "docker_image" "nginx" {
+	name = "nginx: latest
+}
+
++- launch container
+
+resource "docker_container" "nginx" {
+	image = docker_image.nginx.latest
+	name = "enginecks"
+	ports {
+		internal = 80
+		external 80
+	}
+}
+
+----------- Exemple 
+$vim docker.tf
+
+Provider "docker" {
+	host = "tcp://192.168.21.103:2375"
+}
+
+resource "docker_image" "nginx" {
+name = "nginx:latest"
+}
+
+resource "docker_container" "nginx" {
+	image = docker_image.nginx.latest
+	name = "enginecks"
+	ports {
+		internal 80
+		external 80
+	}
+}
+
+EOF
+
+# terraform init			-- Pour prendre en compte le nouveau docker.tf
+# terraform plan
+# terraform apply -auto-approved 
+
+# curl 192.168.21.103
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
