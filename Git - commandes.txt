@@ -1,0 +1,44 @@
+Cours tuto Créer un repository avec GIT et GITHUB: 
+https://www.youtube.com/watch?v=85lbuuFIXG4&list=PLdKVEanRftb-H1p8ar5gt7EBPixFlVt-y&index=5
+
+---- ssh key generation
+
+$ssh keygen -t rsa -b 4096 -C "noreply@olearndev.com"
+
+$ git add .
+$ git status
+
+$ git status
+$ git add README.md
+
+$ git commit -m "Comment commit"
+
+$ git branch -M main
+$ git remote add origin git@github.com:OlearnDev/git.python.git
+git push -u origin main
+
+git branch   # Voir les branches
+
+#------ Create a new branch and merge in main
+
+#Start a new feature
+git checkout -b new-feature main
+
+# Edit some files
+git add <file>
+git commit -m "Start a feature"
+
+# Edit some files
+git add <file>
+git commit -m "Finish a feature"
+
+# Develop the main branch
+git checkout main
+
+# Edit some files
+git add <file>
+git commit -m "Make some super-stable changes to main"
+
+# Merge in the new-feature branch
+git merge new-feature
+git branch -d new-feature
