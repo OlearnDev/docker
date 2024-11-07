@@ -231,7 +231,47 @@ resource "docker_container" "nginx" {
 }
 
 ----------- Exemple 
-$vim docker.tf
+# vim main.tf
+
+#------ Début 1er bloc :
+
+variable "ssh host"
+variable "ssh_user" {}
+variable "ssh_key" {}
+
+resource "null_resource" "ssh_target" {
+	connection {
+		type = "ssh"
+		user = var.ssh_user
+		host = var.ssh_host
+		private_key = file(var.ssh_key)
+	}
+
+	provisioner "remote-exec" {
+		inline = [
+			"sudo apt update -qq >/dev/null",
+			"curl -fsSL https://get.docker.com-o get-docker.sh",
+			"sudo chmod 755 get-docker.sh" "sudo ./get-docker.sh >/dev/null"
+		]
+
+	}
+
+	provision "file" {
+		source = "startup-options.conf"
+		destination = "/tmp/startup-options.conf"
+	}
+
+	provisioner "remote-exec" {								--) Installation de la socket
+	inline = [
+		"sudo mkdir -p /etc/systemd/system/docker.service.d/",
+		"sudo cp /tmp/startup-options.conf /etc/systemd/system/docker.service.d/startup_options.conf",
+		"sudo systemctl daemon-reload",
+		"sudo systemctl restart docker", "sudo usermod -aG docker vagrant"
+	]
+	}
+}
+
+#------ Début 2e bloc : nouveau fichier "docker.tf" éventuellement
 
 Provider "docker" {
 	host = "tcp://192.168.21.103:2375"
@@ -252,29 +292,200 @@ resource "docker_container" "nginx" {
 
 EOF
 
-# terraform init			-- Pour prendre en compte le nouveau docker.tf
+# terraform init			-- Pour prendre en compte le nouveau docker.tf si 2e fichier créé au lieu d'un seul fichier main.tf
 # terraform plan
 # terraform apply -auto-approved 
 
 # curl 192.168.21.103
 
+----------- Terraforn: modules introduction
+
+Terraforn : présentation des modules
+
++- modules: regroupement de fichiers tf avec une cohérence en matière de resources
++- module terraforn rôle ansible
++- registre : https://registry.terraform.to/
++- module = répertoire(s) fichier(s) tf
+
++ utilisation d'un module
+
+	module "monmodule" {
+		source"./rep_module"
+	}
+
++ principe d'héritage du provider
+	- par défaut celui du fichier dans lequel il est appelé 
+	- prossibilité de préciser le provider
+
++ possiblité d'instancier plusieurs fois un nene module :
+
+	module "instancel" {
+		source = "./rep_module"
+	}
+
+	module "instance2" (
+		source"./rep_module"
+	}
+
++ structure of a module
+
+|--README.md
+|--main.tf
+|--variables.tf
+|--outputs.tf
+
++ more advanced
+
+|--README.md
+|--main.tf
+|--variables.tf
+|--outputs.tf
+|--...
+|--modules/
+|--|--nestedA/
+|--|--|--README.md
+|--|--|--variables.tf
+|--|--|--main.tf
+|--|--|--outputs.tf
+|--|--nestedB/ Eneste
+|--|--...
+|--examples/
+|--|--exampleA/
+|--|--|--main.tf
+|--|--examples/
+
++Installation of a nodule
+
+	terraforn get 
+	terraforn init
+
++- can be used to manage dependency management
+
+	terraforn apply -target=module.docker
+	terraforn apply -target=module.postgres
+
+Rq: or via variables
+
+-------- Installation de module docker 
+
+Rq : on est obligé de faire en 2 modules (installation et utilisation) car à l'initialisation du provider docker, terraform check l'existence 
+de la socket ou api de docker lors du plan ou apply
+
+1.Installation -----------------
+
+$ rm -rf .terraform terraform.tfstate
+$ mkdir -p modules/docker_install
+$apt install tree
+$ vim terraform.tfvars
+ssh_host = "192.168.21.103"
+ssh_user = vagrant
+ssh_key  = "/home/vagrant/.ssh/id_rsa"
+
+EOF
+
+$ tree
+|--main.tf
+|--modules
+|--|--docker_install
+|--terraform.tfvars
+
+$cp main.tf modules/docker_install
+
+$vim modules/docker_install/variables.tf
+
+ssh_host = "192.168.21.103"
+ssh_user = vagrant
+ssh_key  = "/home/vagrant/.ssh/id_rsa"
+
+EOF
+
+$vim modules/docker_install/main.tf			--) Supprimer les vars du début dans main.tf dans docker_install
+
+resource "null_resource" "ssh_target" {
+	connection {
+		type = "ssh"
+		user = var.ssh_user
+		host = var.ssh_host
+		private_key = file(var.ssh_key)
+	}
+
+	provisioner "remote-exec" {
+		inline = [
+			"sudo apt update -qq >/dev/null",
+			"curl -fsSL https://get.docker.com-o get-docker.sh",
+			"sudo chmod 755 get-docker.sh" "sudo ./get-docker.sh >/dev/null"
+		]
+
+	}
+
+	provision "file" {
+		source = "${path.module}/startup-options.conf"
+		destination = "/tmp/startup-options.conf"
+	}
+
+	provisioner "remote-exec" {								--) Installation de la socket
+	inline = [
+		"sudo mkdir -p /etc/systemd/system/docker.service.d/",
+		"sudo cp /tmp/startup-options.conf /etc/systemd/system/docker.service.d/startup_options.conf",
+		"sudo systemctl daemon-reload",
+		"sudo systemctl restart docker", "sudo usermod -aG docker vagrant"
+	]
+	}
+}
+
+Modifier le fichier main.tf à la racine de tree :
+
+$vim main.tf
+
+ssh_host = "192.168.21.103"
+ssh_user = vagrant
+ssh_key  = "/home/vagrant/.ssh/id_rsa"
+
+nodule "docker_install" {
+	source = "./modules/docker_install"
+	ssh_host	= var.ssh_host				--) On repasse les vars ici pour etre accessible dans le module
+	ssh_user 	= var.ssh_user					Ces vars proviennent du fichier terraform.tfvars
+	ssh_key 	= var.ssh_key					Au niveau du module, on les récupère grace à variables.tf
+}												Du coup main.tf au niveau du module docker_install peut les utiliser 
+
+$ vim nodules/docker_install/startup-options.conf
+[Service]
+ExecStart=
+ExecStart=/usr/bin/dockerd -H tcp://192.168.21.103:2375 -Η unix:///var/run/docker.sock
 
 
+$ terraform get 
+docker_install in modules/docker_install	--) Terraform voit le nouveau module et son emplacement
 
+$ terraform init 	--) Il recupère le provider "null_resource"
 
+$ terraform plan
 
+An execution plan has been generated and is shown below. 
+Resource actions are indicated with the following symbols: 
+	+ create
 
+Terraforn will perform the following actions:
 
+	#module.docker_install.null_resource.ssh_target will be created 
+	+ resource "null_resource" "ssh_target { 
+		+ id = (known after apply)
+	}
 
+Plan: 1 to add, o to change, 8 to destroy.
 
+$ terraform apply -auto-approve
 
+$ docker -H 192.168.21.103 ps   --) Socket docker répond
 
-
-
-
-
-
-
-
-
+$ tree
+|--main.tf
+|--modules
+|  |--docker_install
+|    |--main.tf
+|    |--startup-options.conf
+|    |--variables.tf
+|--terraform.tfstate
+|--terraform.tfstate.backup
+|--terraform.tfvars
 
