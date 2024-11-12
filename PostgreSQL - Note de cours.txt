@@ -33,19 +33,32 @@ Summary below :
 	systemctl enable postgresql-12					-- Allow postgresql start when system restarts
 	systemctl start postgresql-12
 	systemctl status postgresql-12
+	
+NB : Install network tools like ifconfig using : $sudo apt install net-tools
 
 ------------- Step 2 :  USING POSTGRESQL ROLE
 
 The installation procedure created a user account called postgres that is associated with the default Postgres role.
 
 SWITCH to POSTGRES ACCOUNT
-#sudo iu postgres
+#sudo -u postgres
 
 You can now access a Postgres prompt by typing below command:
 
 $psql
 postgres# \du 	: displays all roles available
 postgres# \q	: to exit psql
+
+Set password for user postgres in  'postgres' and 'template1' databases :
+
+postgres=# ALTER USER postgres with encrypted password 'postgres';
+ALTER ROLE
+
+postgres=#\c template1
+You are now connected to database "template1" as user "postgres".
+template1=# ALTER USER postgres with encrypted password 'postgres';
+ALTER ROLE
+template1=#
 
 ------------- Step 3 : CREATING A NEW NON DEFAULT ROLE.
 
@@ -152,7 +165,7 @@ postgres@OlivierLP:~/16/main/pg_tblspc$ ls -ltrh
 total 0
 lrwxrwxrwx 1 postgres postgres 27 Nov  8 22:33 16390 -> /var/lib/postgresql/16/data
 
-NB : l'id pour le nouveau tbs est : 16390
+NB : l''id pour le nouveau tbs est : 16390
 
 ***** Create database with default tbs :
 
@@ -366,7 +379,7 @@ Log_statement have four options available in PostgreSQL as mentioned below.
 
 None:
 
-This option of log_statement is defined as doesn't log any query in error log file. This is default configurations option of log_statement 
+This option of log_statement is defined as doesn''t log any query in error log file. This is default configurations option of log_statement 
 is available. This is also defined as turning off the log_statement parameter for postgresql.
 
 DDL:
@@ -465,7 +478,178 @@ db1=# show log_statement;
 
 # delete * from course;
 
+---------- How to enable remote access to PostgreSQL server
 
+
+*********  Overview
+
+When you install PostgreSQL, by default connection to the Postgres by using TCP/IP is not allowed.
+
+When you try to connect Postgres database from a client using psql command, 
+you get "psql: could not connect to server: Connection refused" error message.
+
+****** Demo setup
+
+IP address 		hostname 	postgres Vesrion	Role
+
+192.168.1.61	linux2		12					Server
+192.168.1.71	linux1		12					Client
+
+
+# psql -U postgres h 192.168.1.61
+
+1. Modify pg_hba.conf to add Client Authentication Record in IPv4 section :
+
+host 	all		all 	192.168.1.71/24 (client ip) 	md5
+
+
+2. Change the Listen Address in postgresql.conf
+
+On the PostgreSQL database server, by default, the listen address will be localhost 
+in the postgresql.conf file as shown below.
+
+# grep listen /var/lib/pgsql/12/data/postgresql.conf
+listen_addresses = 'localhost'
+
+Modify this line and give IP address of server. If you have multiple interfaces on the server, 
+you can also specify a specific interface to be listened.
+
+Verify updated details.
+
+-bash-4.2$ grep listen /var/lib/pgsql/12/data/postgresql.conf
+listen_addresses = '192.168.1.61' # what IP address(es) to listen on; (server ip)
+
+
+------ Demo
+
+Find localtion of config file : location can be different depending on posygresql installed
+
+postgres=# show data_directory;
+       data_directory
+-----------------------------
+ /var/lib/postgresql/16/main
+(1 row)
+
+postgres=# SHOW hba_file;
+              hba_file
+-------------------------------------
+ /etc/postgresql/16/main/pg_hba.conf
+(1 row)
+
+postgres@OlivierLP:~$ ls -ltrh /etc/postgresql/16/main/
+total 100K
+-rw-r--r-- 1 postgres postgres  317 Nov  8 21:04 start.conf
+-rw-r--r-- 1 postgres postgres  143 Nov  8 21:04 pg_ctl.conf
+-rw-r----- 1 postgres postgres 2.6K Nov  8 21:04 pg_ident.conf
+-rw-r--r-- 1 postgres postgres  315 Nov  8 21:04 environment
+drwxr-xr-x 2 postgres postgres 4.0K Nov  8 21:04 conf.d
+-rw-r--r-- 1 postgres postgres  30K Nov  9 23:28 postgresql.conf.bak
+-rw-r--r-- 1 postgres postgres  30K Nov  9 23:29 postgresql.conf
+-rw-r----- 1 postgres postgres 5.8K Nov 10 21:32 pg_hba.conf.bak
+-rw-r----- 1 postgres postgres 5.9K Nov 10 21:33 pg_hba.conf
+postgres@OlivierLP:~$
+
+$ ls -ltrh /etc/postgresql/16/main/pg_hba.conf
+-rw-r----- 1 postgres postgres 5.8K Nov  8 21:04 /etc/postgresql/16/main/pg_hba.conf
+
+postgres@OlivierLP:~$ cat /etc/postgresql/16/main/pg_hba.conf
+
+# Database administrative login by Unix domain socket
+local   all             postgres                                peer
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     peer
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            scram-sha-256
+host    all             all             10.0.0.64/32            md5					#   Added line for client
+# IPv6 local connections:
+host    all             all             ::1/128                 scram-sha-256
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+
+EOF
+
+Modify postgresql.conf file to sepcify ip of the local server 127.0.1.1 :
+ grep listen_addresses postgresql.conf
+listen_addresses = '127.0.1.1'          # what IP address(es) to listen on;
+
+Bounce postgresql service 
+
+	service postgresql restart
+	service postgresql status
+
+---------- Débogage souci de connexion en remote à bd postgresql en remote ---------------
+
+S'assurer d'utiliser les bons fichiers pg_hba.conf et postgresql.conf dans le bon  rep (utiliser "SHOW hba_file;" pour voir le rép)
+Modifier les valeurs appropriées :
+	+ listen_addresses pour postgresql.conf. Si listen_addresses = 'localhost', les remotes connexions ne sont pas acceptées. Mettre l'ip pour allow remote connexions
+	+ Ligne pour IPv4 dans pg_hba.conf
+	+ Restart du service postgresql dans windows ou 'service postgresql restart' dans linux 
+Installer si nécessaire 'ifconfig' avec 'sudo apt install net-tools' pour voir l''ip de la machine remote avec ifconfig
+Set le passwd du compte postgres pour faire les tests de connexion de la bd 'postgres' par défaut si besoin
+
+-------------------------- Password file 
+
+The file .pgpass aka password file in a user''s home directory can contain passwords to be used if the connection requires a password.
+
+$ psql -U postgres
+
+Prompts for password
+
+When password saved in ~/.pgpass for the mentioned user then it does not prompt for password
+
+$ psql -U postgres
+
+Does not prompt for password due to password file being used. 
+
+In Windows the file is : %APPDATA%\postgresql\pgpass.conf
+
+Permission on the file :
+	In Linux 0600 pgpass 
+	In windows user must have full permission
+
+# format is a below with 5 entries in a line.
+	#hostname:port:database:username:password
+	Localhost:5432:postgres:postgres:password
+	
+	$ chmod 0600 .pgpass
+
+
+------------------- Postgres server configuration file.
+
+Location on new version is in data directory $datadir/postgres.conf
+Older version location: /etc/postgresql/9.5/main/postgresql.conf
+
+Select name, setting from pg_settings;					--> Show parameters and values
+Select distinct context from pg_settings;				--> Shows which Parameters requires system restart (context=postmaster)
+
+postgres=# show config_file;
+config_file
+/var/lib/pgsql/12/data/postgresql.conf
+
+postgres=# show port;
+
+port
+5432
+
+postgres=# Show max_connections;
+
+max_connections
+100
+
+postgres=# alter system set max_connections =200;
+ALTER SYSTEM
+
+postgres=# Show max_connections;
+max_connections
+100
+
+We need to restart instance to see new values applied. Meanwhile, value to be applied is saved in file : postgresql.auto.conf
 
 
 

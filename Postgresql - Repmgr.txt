@@ -1,0 +1,140 @@
+---------------------------- REPMGR - Replication & Failover in Postgres via repmgr
+
+Replication & Failover Management for Postgres
+
+	repmgr is the tool for PostgreSQL replication and failover management.
+	repmgr simplifies administration and complements built-in replication capabilities in PostgreSQL. It was introduced by 2ndQuadrant in 2010.
+	repmgr is free and open-source software licensed under the GNU Public License (GPL) v3.
+	repmgr helps in setting up and managing databases with high availability (HA) and scalability requirements.
+
+It was Introduced by 2nd Quadrant in 2010, repmgr takes advantage of PostgreSQL's Hot Standby capability and greatly simplifies the process 
+of setting up and managing databases with high availability and scalability requirements.
+
+repmgr streamlines
+
+monitoring the replication process. providing support for HA operations such as switchovers and failovers. repmgr 5 is compatible with PostgreSQL 9.4 
+and above
+
+What are the featues of repmgr 5 
+Current release: 5.2.1 (2020-12-08).
+
+	it is Implemented as a PostgreSQL extension.
+	it is used as Replication cluster monitoring.
+	Bits is used in Standby cloning with pg_basebackup or Barman.
+
+		A standby that can be promoted to a primary without requiring a restart. other standbys that can connect to the new master without being 
+		resynced.
+
+********* Cascading standby support
+
+	Standbys not directly connected to the master node are not affected during failover of the primary to another standby mode
+	Replication slot support, simplifying WAL retention management 
+	Switchover support for role-switching between primary and standby
+
+********* Understanding backup with : pg_basebackup
+
+pg_basebackup helps backup an entire directory of postgresql and to be restored in another or standby machine
+
+sudo su postgres
+sudo systemctl status postgresql-12
+psql
+postgres
+postgres=# 	\du
+			\1
+
+**** Prerequisites
+
+Role Creation to perform the backup.
+	postgres=# CREATE USER replication_user WITH REPLICATION ENCRYPTED PASSWORD 'password';
+
+Adding created user in pg_hba.conf file to to allow backup
+	echo "host replication replication_user 192.168.1.51/32 md5" "use arrow" $PGDATA/pg_hba.conf
+	view $PGDATA/pg_hba.conf
+
+Get the changes into effect through a reload.
+	#sudo su postgres
+	$psql -c "select pg_reload_conf()"
+
+To create a base backup of the server at 192.168.1.61 and store it in the local directory /postgres/backup/pgbackup: 
+	$ pg_basebackup -U replication_user -D/postgres/backup/pgbackup/
+
+To create a backup of the local server with one compressed tar file for each tablespace, and store it in the 
+directory backup, showing a progress report while running:
+	$pg basebackup -U replication user -D/postgres/backup/pgbackup/ -Ft - z -P
+	
+
+How to ensure that PostgreSQL replication setup is succesful
+
+primary
+
+sudo su - postgres
+psql
+
+set th expended display as below mentioned
+\x 
+SELECT * FROM pg_stat_replication;
+
+the data shows that replication is working properly between source and target
+
+Replica (Node 2)
+sudo su postgres
+psql
+/x
+SELECT * FROM pg_stat_wal_receiver;
+
+Test -Master
+
+select * from pg_stat_replication;
+
+create table test (name text);
+insert into test values('EMS');
+
+
+-------------- Understanding streaming replication (2 EC2 postgresql-13) -------
+
+Postgres replication is the process of copying data from one database host (primary) to another databse host (standby).
+
+In version 9.0 (back in 2010), streaming replication was introduced.
+
+Streaming replication in PostgreSQL works on log shipping.
+Every transaction in postgres is written to a transaction log called WAL (write-ahead log) to achieve durability. 
+A slave uses these WAL segments to continuously replicate changes from its master.
+
+In Streaming Replication, three kinds of processes work cooperatively.
+	A walsender process on the primary server sends WAL data to standby server; 
+	and then, a walreceiver and a startup processes on standby server receives and replays these data. 
+	A walsender and a walreceiver communicate using a single TCP connection.
+
+PostgreSQL is a widely used relational database that supports both logical and physical replication. 
+Logical replication streams high-level changes from the primary database cluster to the replica databases. 
+Using logical replication, you can stream changes to just a single database or table in a database.
+	
+In physical replication, changes to the WAL (Write-Ahead-Logging) log file are streamed and replicated in the replica clusters. 
+As a result, you can't replicate specific areas of a primary database cluster, but instead all changes to the primary are replicated.
+
+
+===========  Overview of repmgr
+
+repmgr is a open-source tools to manage replication and failover of PostgreSQL servers.
+It supports and enhances PostgreSQL's built-in streaming replication.
+which provides a single read/write primary server and one or more read-only standbys containing near-real time
+copies of the primary server's database.
+
+It provides two main tools:
+
+	1) repmgr:
+		A command-line tool used to perform administrative tasks such as:
+
+			Setting up standby servers. 
+			Promoting a standby server to primary. 
+			Switching over primary and standby servers.
+			Displaying the status of servers in the replication cluster.
+
+	2) repmgrd:
+
+		A daemon which actively monitors servers in a replication cluster and performs below.
+
+			monitoring and recording replication performance
+			performing failover by detecting failure of the primary and promoting the most suitable standby server.
+
+
