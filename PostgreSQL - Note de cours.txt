@@ -587,7 +587,7 @@ Bounce postgresql service
 
 S'assurer d'utiliser les bons fichiers pg_hba.conf et postgresql.conf dans le bon  rep (utiliser "SHOW hba_file;" pour voir le rép)
 Modifier les valeurs appropriées :
-	+ listen_addresses pour postgresql.conf. Si listen_addresses = 'localhost', les remotes connexions ne sont pas acceptées. Mettre l'ip pour allow remote connexions
+	+ listen_addresses pour postgresql.conf. Si listen_addresses = 'localhost', les remotes connexions ne sont pas acceptées. Mettre l''ip pour allow remote connexions
 	+ Ligne pour IPv4 dans pg_hba.conf
 	+ Restart du service postgresql dans windows ou 'service postgresql restart' dans linux 
 Installer si nécessaire 'ifconfig' avec 'sudo apt install net-tools' pour voir l''ip de la machine remote avec ifconfig
@@ -652,19 +652,83 @@ max_connections
 We need to restart instance to see new values applied. Meanwhile, value to be applied is saved in file : postgresql.auto.conf
 
 
+------------------  pg_hba.conf  ----------------------------------------
+
+postgres host based authentication is a file located in data directory and is responsible for
+
+1. Which hosts are allowed to connect through role.
+2. How clients are authenticated.
+3. which PostgreSQL user names they can use.
+4. which databases they can access
+
+**** what is the usage of pg_hba.cnf file.
+
+	It enables client authentication between the PostgreSQL server and the client application.
+
+	This file consists of a series of entries which define a host and its associated permissions
+	(e.g., the database it is allowed to connect to, the authentication method to use, and so on).
 
 
+postgres=# create role user2_remote with login password 'password';
+CREATE ROLE
 
+postgres=# \du
 
+--------------------- Schemas
 
+Schemas allow you to organize database objects.
 
+Schemas enable multiple users to use one database.
 
+It's easier to back-up data that's in a separate schema.
 
+It's easier to restore data that's in a separate schema.
 
+Users can be restricted in their work to single schemas.
 
+keeping your application data separate in schemas improves management
 
+**** Public schema :
 
+	PostgreSQL creates a schema named public for every new database.
 
+	PostgreSQL automatically put it in public schema.
 
+	CREATE TABLE table_name(...);
+	and
+	CREATE TABLE public.table_name(...);
+
+**** BUILDING BLOCKS
+
+Postgresql cluster  (or instance) > databases > Schema > Objects
+
+# SHOW search_path;    --> Path de recherche d'un objet entre plusieurs schémas
+
+search_path
+"$user", public (1 row)
+
+Schema with the same name as the current user is to be searched.
+
+To put our new schema in the path, we use: postgres# \c dvdrental;
+
+postgres# show search_path;
+
+postgres# SET search_path TO schema1, public;
+
+Note: Then we no longer have access to the public schema without explicit qualification. 
+There is nothing special about the public schema except that it exists by default
+
+By default, users cannot access any objects in schemas they do not own.
+
+by default, everyone has CREATE and USAGE privileges on the schema public. This allows all users that are able to connect to a given 
+database to create objects in its public.
+
+Usage Patterns
+
+1) issue REVOKE CREATE ON SCHEMA public FROM PUBLIC. create a schema for each user with the same name as that user. 
+2) Remove the public schema from the default search path by issuing ALTER ROLE ALL SET search_path = "$user".
+3) Keep the default.
+
+Conclusion: you should not use the public schema.
 
 
