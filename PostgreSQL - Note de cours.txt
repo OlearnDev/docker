@@ -731,4 +731,57 @@ Usage Patterns
 
 Conclusion: you should not use the public schema.
 
+--------------- POSTGRESQL CLUSTER
+
+A collection of databases managed by a single PostgreSQL server instance constitutes a database cluster.
+
+Components of cluster :
+
+	* Data directory
+		• Files (databases, tables and all other logical entities) created and managed by Postgres tools and processes
+
+	* Postgres Process
+		• manages the files of data directory and provides interfaces to manipulate the contents.
+
+**** How to create new directory for a cluster 
+
+sudo su postgres
+
+echo $PGDATA
+
+Creating a cluster data directory to a new location/postgres/data/versionl
+
+Note: postgres is superuser
+
+	mkdir -p/postgres/data/versionl initdb/postgres/data/version1
+	CONFIGURING Postgres CLUSTER
+
+Modify below items:
+
+	#port=5432 to 5433
+	#unix_socket_directories = '/var/run/postgresql' to /home/versionl
+
+STARTING Postgres SERVER
+
+	postgres -D/postgres/data/version]
+	pg_ctl -D/postgres/data/version1 -I logfile start
+
+Checking the new process on OS
+
+	ps xf							------> Gives a tree of background processes
+
+Connecting to new cluster
+
+	• psql -h localhost -p 5433 postgres
+
+Stop the server for a cluster
+
+	• pg_ctl -D /postgres/data/version1 -l /postgres/data/logfile stop
+
+Reload the cluster
+
+• pg_ctl -D /postgres/data/version1 -l /postgres/data/logfile.log reload
+
+
+
 

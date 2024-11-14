@@ -1,0 +1,46 @@
+----- MySQL Configuration
+
+• datadir=/var/lib/mysql
+• port=3306
+• socket=/tmp/mysql.sock
+• user=mysql
+• log-bin=mysql1-bin
+• log-error=/var/log/mysqld.log
+• pid-file=/var/run/mysqld/mysqld.pid
+
+Installation
+
+	Initialize
+	Start mysqld
+	Change auto generated password
+	Connect MySQL
+	
+--- Demo 
+
+sudo su
+sudo apt-get install gedit
+cd /opt
+tar xf /home/oem/Downloads/mysql-5.7.29-linux-glibc2.12-x86_64.tar.gz mkdir /usr/local/mysql
+
+chmod 764 /usr/local/mysql
+ln -s /opt/mysql-5.7.29-linux-glibc2.12-x86_64/* /usr/local/mysql
+
+gedit ~/.bashrc
+
+export PATH=$PATH:/usr/local/mysql/bin
+
+source ~/.bashrc
+
+adduser system mysql
+mkdir /var/lib/mysql
+chown mysql /var/lib/mysql
+mkdir /var/run/mysqld
+chmod 777 /var/run/mysqld
+chmod 777 /var/log
+ls -l /var/log
+
+gedit /etc/my.cnf
+
+	
+	
+	
