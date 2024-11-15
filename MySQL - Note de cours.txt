@@ -41,6 +41,190 @@ ls -l /var/log
 
 gedit /etc/my.cnf
 
+[mysqld]
+
+datadir=/var/lib/mysql
+port=3306
+socket=/tmp/mysql.sock
+user=mysql
+server-id=1								<---- You can give any number
+log-bin-mysql1-bin
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+
+EOF
+
+
+mysqld --initialize						: Initializes the folder. If you get error related to lib, run cmd below
+sudo apt-get install libaiol libaio-dev
+
+Mysqld --initialize
+
+cat /var/log/mysqld.log
+....
+2020-02-17T18:55:32.4911472 0 [Warning] CA certificate ca.pem is self signed.
+2020-02-17T18:55:32.789606Z 1 [Note] A temporary password is generated for root@localhost:,bxk&kSo*otg  <---- a temp password is generated in log file
+
+EOF
+
+mysqld &
+[1] 6547
+
+ps -ef | grep mysqld
+mysql	6547 6015 2 00:26 pts/0 00:00:00 mysqld
+root	6576 6015 0 00:26 pts/0 00:00:00 grep -color=auto	mysqld
+
+# mysqladmin -u root -p password    <---- Change the root password
+
+Connect to mysql using :
+
+# mysql -u root -p				<---- You'll need to enter the pwd
+# mysql -u root -pnewpdw		<---- specify the password in the line
+
+mysql> status
+
+#mysqladmin -S/tmp/mysql.sock -p password <-- -S/tmp/mysql.sock specifies the socket file if we don't want the default
+
+
+----------- SYSTEM Databases
+	mysql				: contains users, logs, ...
+	sys					: system infos (session, process, waits, mem ...)
+	performance_schema	: sys performance infos. Not all tables collect dtata by default
+	information_schema	: temporary db
 	
-	
-	
+Default engines 
+
+	MyISAM
+	CSV
+	PERFORMANCE_SCHEMA
+	BLACKHOLE
+	MEMORY
+	InnoDB			<-- Default
+	ARCHIVE
+	MRG_MYISAM
+	FEDERATED
+
+Default Files
+
+• auto.cnf
+	MySQL 5.6 -auto generated -important for GTID and uniquely identify server
+
+• Ibtmp1
+	ibtmp1 is a temporary working file for MySQL.
+	When you turn the MySQL server off and on again the file is deleted and the server runs again without issue 
+	until the file becomes too large again
+
+• mysql.pid
+	MySQL Process Id
+
+• mysqld.log
+	Log file mysqld
+
+• ibdata1
+
+	➤ System tablespace for innodb
+	➤ Table data pages
+	➤ Table Index pages
+	➤ MVCC Control data
+
+• Redo Logs
+
+	➤ ib_logfile1
+	➤ ib_logfile0
+
+---- Demo
+
+mysql> show databases;
+mysql> use mysql
+mysql> show tables;
+mysql> select * from user \G    : / default users : root, mysql.sys, mysql.session
+
+mysql> create database db1;
+
+mysql> use dbl
+Database changed
+
+mysql> create table tblinnodb (id int);
+Query OK, 0 rows affected (1.65 sec)
+
+mysql>
+
+root@oem-VirtualBox:/home/oem# ls /var/lib/mysql/dbl
+db.opt tblinnodb.frm tblinnodb.ibd
+
+	.frm : contains the schema of the table
+	.idb : contains datas and indexes
+
+mysql> create table tbMyISAM(id int) engine=MYISAM; 
+
+# ls /var/lib/mysql/dbl
+db.opt tblinnodb.frm tblinnodb.ibd tbMyISAM.frm tbMyISAM.MYD tbMyISAM.MYI
+
+	.frm : contains the schema of the table
+	.MYD : contains datas
+	.MYI : contains indexes
+
+mysql> create table tblMemory(id int) engine=MEMORY;
+
+# ls /var/lib/mysql/dbl
+db.opt tblinnodb.frm tblinnodb.ibd	tblMemory.frm tbMyISAM.frm tbMyISAM.MYD tbMyISAM.MYI
+
+mysql> create table tblCSV(id int not null) engine=CSV;
+
+# ls /var/lib/mysql/dbl/tblcsv*
+tblcsv.CSV	tblcsv.CSM tblCSV.frm
+
+----------------- Tablespaces 
+
+mysql> use dbl;
+Database changed 
+
+mysql> select database();
+ database() 
+--+
+
+| dbl
+
++
+
+
+mysql> prompt \d>   <----- Change the prompt to indicate database we are connected to
+PROMPT set to '\d>'
+dbl>
+
+db1>CREATE TABLESPACE myspace add datafile 'myspace.ibd';
+
+# ls /var/lib/mysql
+myspace.ibd				<---- Name of the tablespace file
+
+db1>Create table test2(id int) TABLESPACE=myspace;
+
+# ls /var/lib/mysql/dbl/test2*
+test2.frm						<---- .ibd file not created as located in the tbs file myspace.ibd
+
+NB: If you create yiur tbs in another localtion, in db directory, you will see a file with <tablespace name>.isl,
+which is a symbolic link to the tablespace file
+
+db1>CREATE TABLE Test4(id int) DATA DIRECTORY='/data';
+
+# ls /data
+db1 mysecspace.ibd
+
+# ls /data/dbl
+Test4.ibd
+
+# ls /var/lib/mysql/dbl/Test4*
+Test4.frm Test4.isl
+
+# cat /var/lib/mysql/db1/Test4.isl
+/data/db1/Test4.ibd
+
+db1>show create table Test4\G
+
+
+
+
+
+
+
+
