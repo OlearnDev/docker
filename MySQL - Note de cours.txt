@@ -222,6 +222,323 @@ Test4.frm Test4.isl
 db1>show create table Test4\G
 
 
+------- Backup and Restore
+
+Create a new instance :
+
+$vi /etc/my2.cnf
+
+[mysqld]
+
+datadir=/mysql
+port=3307
+socket=/mysql/mysql.sock
+user=mysql
+server- server-id=2
+log-bin=/mysql/mysql1-bin
+log-error=/mysql/mysqld.log
+pid-file=/mysql/mysqld.pid
+
+EOF
+
+
+$ sudo su
+# mkdir /mysql
+# chown mysql/mysql
+# mkdir /backup
+# chmod 764 /mysql
+# mysqld --defaults-file=/etc/my2.cnf -initialize
+
+# ls /mysql
+	auto.cnf 
+	client-key.pem
+	ib_logfilel
+	ca-key.pem
+	ib_buffer_pool
+	ibtmpl
+	ca.pem
+	ibdatal
+	mysql
+	client-cert.pem
+	ib_logfile0
+	mysqll-bin.000001
+	mysql1-bin.index
+	public_key.pem
+	mysqld.log				<--- mysql daemon process log which contains temporary pwd for root mysql
+	server-cert.pem
+	performance_schema
+	server-key.pem
+	private_key.pem
+	sys
+
+# mysqld --defaults-file=/etc/my2.cnf &  <--- Start mysql in backend
+
+root@oem-VirtualBox:/home/oem
+mysql	2295	2242	0 	13:08 	?	 	00:00:05 	mysqld
+mysql	3705	3609 	2 	16:03 	pts/4	00:00:00	mysqld--defaults-file=/etc/my2.cnf
+
+# mysqladmin -S/mysql/mysql.sock -u root -p password		<---- changing root password
+Enter password:
+New password:
+Confirm new password:
+
+# mysql -u root -psauras -S/mysql/mysql.sock  <---- Specify the socket file to be sure to connect to desired instance  
+
+mysql>
+
+mysql> show variables like 'port';
+
+| Variable_name | Value |
+ port	| 3307
+ 
+mysql> prompt 2>			<--- We give a prompt to identify the instance we connect to
+
+PROMPT set to '2>'
+2>
+
+NB : to connect to default instance running :
+
+# mysql -u root -psauras
+
+mysql> show variables like 'port';
+
+| Variable_name | Value |
+ port	| 3306
+ 
+mysql> prompt 1>			<--- We give a prompt to identify the instance we connect to
+
+PROMPT set to '1>'
+1>1>show databases;
+
+| Database
+	information_schema
+	dbl
+	db2
+	mysql
+	performance_schema
+	sys
+
+1>use dbl
+
+1>show tables;
+	test
+
+1>use db2
+
+1>show tables;
+	testable
+
+# mysqldump -u root -psauras db1 > /backup/db1.sql							<-- Backup only database : db1 in defaut mysql instance (no socket used)
+# mysqldump -u root -psauras --databases db1 db2 > /backup/multidbs.sql		<-- Backup databases : db1, db2
+# mysqldump -u root -psauras --all-database > /backup/alldbs.sql 			<-- Backup all databases
+
+# ls /backup
+alldbs.sql 	db1.sql 	multidbs.sql
+
+
+*** Restore db1 on new mysql instance 
+
+We need to create db1 in order to proceed with restore of db1 on this instance
+
+2>show databases;
+
+| Database
+	information_schema 
+	mysql
+	performance_schema 
+	sys
+
+2>create database dbl;
+
+# mysql -u root -psauras - S/mysql/mysql.sock dbl < /backup/db1.sql 	<-- Restore using backup file : db1.sql
+
+Check on new instance :
+
+2>use dbl
+Database changed
+
+2>show tables;
+
+| Tables_in_dbl |
+	test
+
+*** Restore using backup for multi dbs
+
+2>drop database dbl;
+
+# mysql -u root -psauras - S/mysql/mysql.sock < /backup/multidbs.sql
+
+2>show databases;
+
+| Database
+	information_schema 
+	db1
+	db2
+	mysql
+	performance_schema 
+	sys
+	
+NB : If you want to restore all dbs in a dumpfile, no need to create the db before restore
+	The result will be the same with dumpfile alldbs containing backups of db1 and db2
+	
+**** Restore only a db from dumpfile of multiple dbs
+
+2>drop database db2;
+2>drop database db1;
+
+2>create database db1;		<-- Create a blank database db1 before restoring db1
+
+# mysql -u root -psauras - S/mysql/mysql.sock-one-database dbl < /backup/alldbs.sql
+
+2>show databases;
+
+| Database
+	information_schema
+	dbl
+	db2						<-- db2 also is restored even not specified
+	mysql
+	performance_schema
+	sys
+
+2>use db2
+Database changed
+
+2>show tables;				<-- db2 restored with no tables
+Empty set (0.00 sec)
+
+2>
+
+NB : Using mysql to perform a backup of atabase does not perform a complete backup of database, instead it backup 
+tables and objects in the database. Use mysqldump for a complete backup
+
+# mysqldump -u root -psauras --routines --events--triggers dbl>/backup/db1_full.sql
+
+
+----------- Point in time Recovery
+
+# mysql -u root -psauras							<-- Default mysql instance
+
+mysql> show databases;
+
+| Database
+	information_schema
+	dbl
+	mysql
+	performance_schema
+	sys
+
+mysql> use db1;
+mysql> show tables;
+| Tables_in_db1 |
+	test
+
+# mysql -u root -psauras - S/mysql/mysql.sock 		<-- Second mysql instance with other socket file specified
+
+mysql> insert into test values (1), (2),(3); 
+mysql> select * from test;
+
+| id
+	1
+	2
+	3
+
+Backup db1 :
+
+# mysqldump -u root -psauras db1 >/backup/db1.sql
+
+# cat /backup/db1.sql  		<-- See backup containt details
+
+After backup, insert and delete data in db1 :
+
+mysql> insert into test values (4),(5),(6); Duplicates: 0
+mysql> select * from test; 
+ id
+	1
+	2
+	3
+	4
+	5
+	6
+
+mysql> delete from test;
+
+Using bin log to restore db1 with last inserted data in second mysql instqnce:
+
+mysql> show master status;
+
+File				| Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set
+mysqll-bin.000017      1484 
+
+Create db1 in second instance :
+
+2> create database db1;
+
+Restore backup after 3 inserted data :
+
+# mysql -u root -psauras - S/mysql/mysql.sock dbl < /backup/db1.sql
+
+2> use dbl;
+Database changed 
+
+2> show tables;
+| Tables_in_db1 |
+	test
+
+2> select * from test;
+
+id
+	1
+	2
+	3
+
+Check the content of the bin log file, in a readable format using mysqlbinlog :
+
+# mysqlbinlog /var/lib/mysql/mysqll-bin.000017
+
+
+BEGIN
+/*!*/;
+# at 1079        					<---- Delete command started at position 1079
+#200229 2:18:10 server id 1 end_log_pos 1125 CRC32 0x55a4f017  Table_map: dbl`.`test mapped to number 112
+# at 1125
+#200229 2:18:10 server id 1 end_log_pos 1175 CRC32 0x840619a3	Write rows: table id 112 flags: STMT_END_F
+
+............
+
+BEGIN
+/*!*/;
+# at 1342
+200229 2:18:29 server id 1 end_log_pos 1388 CRC32 0x5bb2eaea 	Table_map: `dbl` test mapped to number 112
+# at 1388
+#200229 2:18:29 server id 1 end_log_pos 1453 CRC32 0x9ab1c124		Delete_rows: table id 112  flags: STMT END F
+
+
+---> We want data between positions  1079 and 1342
+
+Dump bin log data during that period in a file :
+
+# mysqlbinlog /var/lib/mysql/mysql1-bin.000017 --start-position 1079 --stop-position 1342-skip-gtids >/backup/binlog.sql
+
+We have 2 ways to restore incremental data : using OS or mysql terminal
+
+Using mysql terminal :
+
+mysql> source /backup/binlog.sql
+
+mysql> select * from test; 
+ id
+	1
+	2
+	3
+	4
+	5
+	6
+
+
+
+
+
+
 
 
 
