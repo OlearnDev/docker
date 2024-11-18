@@ -23,7 +23,7 @@ cd /opt
 tar xf /home/oem/Downloads/mysql-5.7.29-linux-glibc2.12-x86_64.tar.gz mkdir /usr/local/mysql
 
 chmod 764 /usr/local/mysql
-ln -s /opt/mysql-5.7.29-linux-glibc2.12-x86_64/* /usr/local/mysql
+ln -s /opt/mysql-5.7.29-linux-glibc2.12-x86_64/* /usr/local/mysql   		*/
 
 gedit ~/.bashrc
 
@@ -160,7 +160,7 @@ mysql> create table tbMyISAM(id int) engine=MYISAM;
 # ls /var/lib/mysql/dbl
 db.opt tblinnodb.frm tblinnodb.ibd tbMyISAM.frm tbMyISAM.MYD tbMyISAM.MYI
 
-	.frm : contains the schema of the table
+	.frm : contains the schema of the table  (.isd for recent mysql releases)
 	.MYD : contains datas
 	.MYI : contains indexes
 
@@ -244,7 +244,7 @@ EOF
 
 $ sudo su
 # mkdir /mysql
-# chown mysql/mysql
+# chown mysql /mysql
 # mkdir /backup
 # chmod 764 /mysql
 # mysqld --defaults-file=/etc/my2.cnf -initialize
@@ -273,7 +273,7 @@ $ sudo su
 
 # mysqld --defaults-file=/etc/my2.cnf &  <--- Start mysql in backend
 
-root@oem-VirtualBox:/home/oem
+$ps -ef|grep mysqld
 mysql	2295	2242	0 	13:08 	?	 	00:00:05 	mysqld
 mysql	3705	3609 	2 	16:03 	pts/4	00:00:00	mysqld--defaults-file=/etc/my2.cnf
 
@@ -308,7 +308,8 @@ mysql> show variables like 'port';
 mysql> prompt 1>			<--- We give a prompt to identify the instance we connect to
 
 PROMPT set to '1>'
-1>1>show databases;
+1>
+1>show databases;
 
 | Database
 	information_schema
@@ -333,7 +334,7 @@ PROMPT set to '1>'
 # mysqldump -u root -psauras --all-database > /backup/alldbs.sql 			<-- Backup all databases
 
 # ls /backup
-alldbs.sql 	db1.sql 	multidbs.sql
+alldbs.sql 	  db1.sql 	multidbs.sql
 
 
 *** Restore db1 on new mysql instance 
@@ -379,7 +380,7 @@ Database changed
 	sys
 	
 NB : If you want to restore all dbs in a dumpfile, no need to create the db before restore
-	The result will be the same with dumpfile alldbs containing backups of db1 and db2
+	The result would be the same with dumpfile alldbs containing backups of db1 and db2
 	
 **** Restore only a db from dumpfile of multiple dbs
 
@@ -408,7 +409,7 @@ Empty set (0.00 sec)
 
 2>
 
-NB : Using mysql to perform a backup of atabase does not perform a complete backup of database, instead it backup 
+NB : Using mysql to perform a backup of database does not perform a complete backup of database, instead it backups 
 tables and objects in the database. Use mysqldump for a complete backup
 
 # mysqldump -u root -psauras --routines --events--triggers dbl>/backup/db1_full.sql
@@ -450,7 +451,7 @@ Backup db1 :
 
 After backup, insert and delete data in db1 :
 
-mysql> insert into test values (4),(5),(6); Duplicates: 0
+mysql> insert into test values (4),(5),(6); 
 mysql> select * from test; 
  id
 	1
@@ -464,7 +465,7 @@ mysql> delete from test;
 
 Using bin log to restore db1 with last inserted data in second mysql instqnce:
 
-mysql> show master status;
+mysql> show master status;		<--- See bin file used
 
 File				| Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set
 mysqll-bin.000017      1484 
@@ -473,7 +474,7 @@ Create db1 in second instance :
 
 2> create database db1;
 
-Restore backup after 3 inserted data :
+Restore from backup after 3 inserted data :
 
 # mysql -u root -psauras - S/mysql/mysql.sock dbl < /backup/db1.sql
 
@@ -498,7 +499,7 @@ Check the content of the bin log file, in a readable format using mysqlbinlog :
 
 BEGIN
 /*!*/;
-# at 1079        					<---- Delete command started at position 1079
+# at 1079        					<---- Last inserted command started at this position 
 #200229 2:18:10 server id 1 end_log_pos 1125 CRC32 0x55a4f017  Table_map: dbl`.`test mapped to number 112
 # at 1125
 #200229 2:18:10 server id 1 end_log_pos 1175 CRC32 0x840619a3	Write rows: table id 112 flags: STMT_END_F
@@ -507,7 +508,7 @@ BEGIN
 
 BEGIN
 /*!*/;
-# at 1342
+# at 1342							<---- Delete command started at this position 
 200229 2:18:29 server id 1 end_log_pos 1388 CRC32 0x5bb2eaea 	Table_map: `dbl` test mapped to number 112
 # at 1388
 #200229 2:18:29 server id 1 end_log_pos 1453 CRC32 0x9ab1c124		Delete_rows: table id 112  flags: STMT END F
@@ -515,7 +516,7 @@ BEGIN
 
 ---> We want data between positions  1079 and 1342
 
-Dump bin log data during that period in a file :
+Dump bin log data during that period in a file called /backup/binlog.sql:
 
 # mysqlbinlog /var/lib/mysql/mysql1-bin.000017 --start-position 1079 --stop-position 1342-skip-gtids >/backup/binlog.sql
 
@@ -523,7 +524,7 @@ We have 2 ways to restore incremental data : using OS or mysql terminal
 
 Using mysql terminal :
 
-mysql> source /backup/binlog.sql
+mysql> source /backup/binlog.sql			<--- Restores and applied incremental insert in db
 
 mysql> select * from test; 
  id
@@ -533,6 +534,100 @@ mysql> select * from test;
 	4
 	5
 	6
+
+---------- Managing Users --------------
+
+# mysql -u root -psauras 
+
+Check current users :
+mysql> select user from mysql.user\G  
+
+user: mysql.session
+user: mysql.sys
+user: root
+
+mysql>
+
+Create a user :
+mysql> create user admin@'%' identified by 'welcome' password expire;
+
+When creating a user, you specify :
+	@'%' 		: tout specify user can connect from any host
+	@localhost 	: user can connect ony locally
+	@192.168.%	: user can connect only from this host ip range
+	
+	expire 		: force user to change password at 1st connection
+
+To grant permission to connect to any object :
+
+mysql> grant usage on *.* to admin@'%';   
+
+For DML actions, object name should be specified
+
+To check permission granted :
+
+mysql> show grants for admin@'%';
+
+Grants for admin@%
+
+	 GRANT USAGE ON *.* TO 'admin'@'%'
+
+Connecting with the user :
+
+# mysql -u admin -pwelcome
+
+mysql> show databases;
+ERROR 1820 (HY000): You must reset your password using ALTER USER statement before executing this statement.
+
+mysql> Alter user user() identified by 'sauras'; 		<--- We used user() function which contains current user 
+														instead of specifying the username
+mysql> show databases;
+
+Database
+ information_schema 
+
+*** Grant select on table to admin user as mysql user:
+
+mysql> grant select on dbl.test to admin@'%';
+
+*** Now connect as admin user : 
+
+mysql> show databases;
+
+Database
+ information_schema
+ dbl
+
+mysql> use dbl
+Database changed 
+
+mysql> show tables;
+
+| Tables_in_dbl |
+	test
+
+To grant insert on table to admin user :
+
+mysql> grant INSERT on db1.test to admin@'%' WITH grant option;   <-- WITH grant option allows to grant also insert perm to another user
+
+To revoke a permission: 
+
+mysql> REVOKE select on dbl.test from admin@'%';
+
+To grant all privs :
+
+GRANT ALL PRIVILEGES ON .* to user admin@'%';
+
+See more details on privs at : https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html
+
+
+
+create user admin1@'%' identified by 'welcome' PASSWORD EXPIRE PASSWORD EXPIRE INTERVAL 90 DAY; <-- Password expires every 90 days at 1st expires after 90 days
+
+ALTER USER admin1@'%' WITH MAX QUERIES_PER_HOUR 50 MAX UPDATES_PER HOUR 50; <-- limits user to not perform more than 50 queries or 50 updates per hour
+
+
+
 
 
 

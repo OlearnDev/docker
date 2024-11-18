@@ -1,0 +1,297 @@
+auto.cnf
+general log : Enables to log everything happening on the server 
+
+MySQL Log files:
+
+	+Error log (Variable: log_error log-error = mysqld.log)
+	+General Log (Variables: general_log =1, general_log_file=PATH) does not require a server restart
+	+Slow Query log (Variables: slow_query_log=1, slow_query_log_file=PATH, long_query_time=sec)
+	+Binary log (Variables: log_bin=1)
+	
+The InnoDB storage engine has its own tablespace and log files.
+
+	The tablespace contains data and index information for all InnoDB tables, as well as the undo logs that are needed 
+	if a transaction must be rolled back.
+	The log files record information about committed transactions and are used to ensure that no data loss occurs.
+	The default tablespace file is named ibdata1 and the default log files are named ib_logfile and ib_logfile1.
+
+Changing GLOBAL variables has changed in MySQL :
+- In old release, you had to restart mysql to take effect
+- In release 8, there is a persistent file which keeps new values and you don't need to restart mysql. And values in this file are
+  applied to config file after restart mysql
+
+Key Cache memory is only in MyISAM storage engine : indexes structures are stored in this memory cache and not if .MYI file
+
+*** MySQL Concepts: InnoDB
+
+InnoDB tables are transaction-safe storage engine that has commit, rollback, and crash recovery capabilities for data protection.
+
+	It supports row-level locking.
+	Foreign key referential-integrity constraint can be defined.
+	Table can extend to any size even beyond multiple GB and power loss recovery is fast.
+	The InnoDB stores user data in clustered indexes
+	This reduces I/O for common queries based on primary keys
+	InnoDB should be used for applications requiring the data integrity.
+
+*** MySQL Concepts: MyISAM
+
+	MyISAM is the improved version of the original storage engine of MySQL, ISAM
+	After MySQL 3.23, MyISAM replaced ISAM as the default storage engine.
+	The MyISAM engine is fast and thus, preferred for web and other application environments.
+	It is also used for data warehousing
+	MyISAM is not transaction-safe and supports 64 keys per table with maximum key length of 1024 bytes
+	The size of MyISAM table depends on the host operating system
+	MyISAM table allows table level locking only.
+	There are no limitations on data file transfer and the data files can be ported from system to system
+	The foreign key constraint cannot be defined
+	MyISAM is the only storage engine that supports Full-text search
+	It also supports one auto increment column per table
+	A high-byte-first pattern for saving numeric key values ensures faster indexing
+	It can be used where fulltext indexing is needed
+
+	Mysqlsh : used for scripting. You have Mysql shell for sql, javascript and python
+
+*** NDB (For MySQL Cluster):
+
+	Fully Transactional and ACID Storage engine.
+	Distribution execution of data and using multiple mysqld.
+	NDB use logical data with own buffer for each NDB engine.
+	Offers REDO and UNDO for transactions.
+	Row-level locking.
+	Horizontal scaling of data.
+
+*** The MERGE Engine  (used to resolve partitioning issue by union of tables)
+
+The MERGE storage engine manages tables that have the following characteristics:
+
+	• A MERGE table is a collection of identically structured MyISAM tables. Each MERGE table is represented on disk 
+		by an .frm format file and an.MRG file that lists the names of the constituent MyISAM files.
+	• Logically, a query on a MERGE table acts as a query on all the MyISAM tables of which it consists.
+	• A MERGE table creates a logical entity that can exceed the maximum MyISAM table size.
+	• MySQL manages contention between queries for MERGE table access using table- level locking.
+	• A MERGE table is portable because the .MRG file is a text file and the MyISAM tables that it names are portable.
+	• The MERGE engine supports SELECT, DELETE, UPDATE, and INSERT statements. For INSERT, the CREATE TABLE statement 
+		can specify whether records should be inserted into the first or last table, or disallowed.
+
+	• Disadvantage:
+
+		.They increase the number of file descriptors required because each of the underlying tables must be opened 
+			along with the MERGE table.
+
+--- Demo Merge : 
+
+mysql> INSERT INTO t1 (message) VALUES ('Testing'),('table'), ('tl');
+mysql> INSERT INTO t2 (message) VALUES ('Testing'),('table'),('t2');
+
+Merging t1 and t2 :
+
+mysql> CREATE TABLE total (a INT NOT NULL AUTO_INCREMENT, message CHAR(20), INDEX(a))ENGINE=MERGE UNION=(t1,t2) INSERT_METHOD=LAST;
+
+mysql> select * from total;
+
+a		message 
+	1		Testing 
+	2		table
+	3 		tl
+	1		Testing
+	2		table
+	3 		t2
+
+mysql> select * from tl;
+
+a		message 
+	1		Testing 
+	2		table
+	3 		tl
+
+3 rows in set (0.00 sec)
+
+mysql> select * from t2;
+
+a		message 
+	1		Testing 
+	2		table
+	3 		t2
+
+NB: If the 2 tables have a primary key, you must create an index on this column in merged table
+
+
+*** MEMORY Engine (Only .frm or .sdi file created)
+
+	Non-transactional storage engine.
+	All data stored in memory other than table metadata and structure.
+	Table-level locking :
+		Cannot contain TEXT or BLOB columns
+		Can use different character sets for different columns
+
+mysql> CREATE TABLE testBH (i INT, C CHAR(10)) ENGINE = 'MEMORY';
+
+mysql> select @@datadir;
+@@datadir
+	/var/lib/mysql/ 
+	
+# ll /var/lib/mysql/mughees/testBH*
+1 mysql mysql 2402 Oct 30 00:33 testBH_371.sdi
+
+mysql> INSERT INTO testBH VALUES (1, 'record one'), (2, 'record two');
+
+mysql> select * from testBH;
+
+i 	c
+
+1	record one 
+2	record two 
+
+# systemctl restart mysqld
+
+mysql> select * from testBH; 
+Empty set (0.00 sec)
+
+
+*** ARCHIVE Engine (rarely used data)
+
+	Non-transactional storage engine
+	The data file has an extension of .ARZ. An.ARN file.
+	Added in MySQL 4.1.3
+	Store large amounts of compressed and unindexed data.
+	Allow INSERT and SELECT sql operations.
+	DELETE or UPDATE sql operations not permitted.
+	Table-level locking.
+
+*** The CSV storage engine stores records as text in the well-known comma-separated values format.
+
+	-It does not support indexing. Each CSV table is represented on disk by an .frm format file and a .CSV plain
+	 text file that contains data rows.
+	-The CSV storage engine does not support indexing.
+	-The CSV storage engine does not support partitioning.
+	-All tables that you create using the CSV storage engine must have the NOT NULL attribute on all columns.
+
+CREATE TABLE testcav (1 INT NOT NULL, CHAR(10) NOT NULL) ENGINE CSV;
+INSERT INTO testcay VALUES (1,'z one'), (2, 'r two);
+SELECT FROM testcav;
+
+[root@mysqll mughees]# cat testcsv.CSV
+
+1,"r one"
+2, "r two"
+
+
+*** The EXAMPLE storage engine does nothing except create tables.
+
+	-You can't even store any rows in an EXAMPLE table, although this is by design.
+	-The purpose of this engine is to provide simple example code in MySQL source to demonstrates how to get started 
+	  writing a new storage engine.
+	-The EXAMPLE storage engine does not support indexing.
+	-The EXAMPLE storage engine does not support partitioning.
+
+
+*** •The BLACKHOLE storage engine creates tables that act as "black holes."
+
+That is, what goes in does not come out.
+
+	Data stored in a BLACKHOLE table disappears because the engine simply discards it.
+	The only disk file associated with a BLACKHOLE table is its .frm format file.
+	Measurement of the overhead from binary logging
+	Supports all kinds of indexes
+	Committed transactions are written to the binary log, and rolled- back transactions are not
+
+mysql> CREATE TABLE testBH (i INT, C CHAR(10)) ENGINE = BLACKHOLE;
+mysql> INSERT INTO testBH VALUES(1, 'record one'),(2,'record two'); 
+mysql> SELECT * FROM testBH
+Empty set (0.00 sec)
+
+---- INNO DB 
+
+	ACID (Atomicity, Consistency, Isolation, Durability)Transactional Storage engine for MySQL
+	Multi Versioning
+	Foreign Keys in MySQL
+	Row level locking in MySQL
+	Automatic Crash recovery in MySQL
+	Data storage in tablespace:
+		Multiple data files 
+		object structure using InnoDB data and log buffer
+	Use shared file to store objects [Data and Index in the same file]
+	InnoDB data is 100% of a logical structure, data stored physically.
+	InnoDB Read physical data and build logical structure[Blocks and Rows]
+	Logical storage called as TABLESPACE.
+	Optimized for high performance in MySQL
+	Stable and secure in MySQL
+
+Buffer Pool
+
+Central buffer for InnoDB storage engine. In this buffer, mysql load blocks and cache table index and data..
+	The main memory where InnoDB cache table data and indexes.
+	Size up to 80% of physical memory on dedicated DB server recommended
+	Shared buffer across all sessions.
+	InnoDB use LRU (Least Recently Used) page replacement algorithm.
+	Data that is being reused is always in the same memory.
+	Data that does not use, will get phased out eventually.
+	Variable: innodb buffer pool size
+	Buffer pool size must always be equal to or a multiple of innodb buffer pool chunk size* innodb buffer pool instances
+
+
+Buffer Pool : Configuration
+
+Ideally, you set the size of the buffer pool to as large a value as practical, leaving enough memory for other processes on the server to run without excessive paging.
+
+The best thing about MySQL 8 is that innodb buffer pool size is dynamic, meaning you can vary innodb_buffer_pool_sizewithout restarting the server.
+
+RAM		Buffer 	Pool Size (Range) (in a dedicated server)
+
+4 GB	1GB-2GB
+8 GB	4GB-6GB
+12 GB	6 GB-10 GB
+16 GB	10 GB-12 GB
+32 GB	24 GB-28 GB
+64 GB	45 GB-56 GB
+128 GB	108 GB-116 GB
+256 GB	220 GB-245 GB
+
+innodb_buffer_pool_instances:
+
+	You can divided the InnoDBbuffer poolinto separate regions to improve concurrency, by reducing contention 
+	as different threads read and write to cached pages, For example, if the buffer pool size is 64 GB 
+	and innodb_buffer_pool instancesare 32, the buffer is split into 32 regions with 2 GB each.
+
+innodb_buffer_pool_chunk_size
+
+	To avoid copying all buffer pool pages during resizing operations, the operation is performed in "chunks". 
+	By default, innodb buffer pool chunk size is 128MB (134217728 bytes). The number of pages contained in a 
+	chunk depends on the value of innodb_page_ size, innodb buffer_pool chunk size can be increased or decreased 
+	in units of 1MB (1048576 bytes).
+
+	To preload the buffer pool at server restart, enable the options: 
+		innodb_buffer_pool_dump at shutdown and 
+		innodb_buffer_pool_load at startup.
+
+Change buffer
+
+	In a memory change buffer is a part of InnoDB buffer pool and on disk, it is a part of system tablespace, 
+	so even after database restart index changes remain buffered. Change buffer is a special data structure 
+	that caches changes to secondary index pages when affected pages not in the buffer pool. Buffered Changes 
+	came from DML operation like INSERT, UPDATE, andDELETE etc.
+
+	Variable: innodb_change_buffering
+
+	Defined the type of changes keep in change buffer. The default is 'all' i.e Buffer inserts, deletemarking 
+	operations, and purges.
+
+Adaptive Hash Index
+
+If a table fits almost entirely in main memory, a hash index can speed up queries by enabling direct lookup of 
+any element, turning the index value into a sort of pointer. InnoDB has a mechanism that monitors index searches. 
+If InnoDB notices that queries could benefit from building a hash index, it does so automatically.
+
+Variable: innodb_adaptive_hash_index
+
+Redo log buffer
+
+	Buffer for redo logs, hold data to written to the redo log. Periodically data getting flushed from redo log 
+	buffer to redo logs. Flushing data from memory to disk managed by 
+	innodb_log_at_trx_commit and innodb_log_at_timeout configuration option.
+
+	- A large size of redo log buffer enables a large transaction to run without writing redo logs to disk before 
+	  the transaction commit.
+	- Variable: innodb_log_buffer_size (default 16M)
+
+
